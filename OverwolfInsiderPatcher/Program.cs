@@ -1,4 +1,5 @@
-﻿using Mono.Cecil;
+﻿using Microsoft.Win32;
+using Mono.Cecil;
 using Mono.Cecil.Cil;
 using System;
 using System.Diagnostics;
@@ -12,8 +13,13 @@ namespace OverwolfInsiderPatcher
     {
         static void Main()
         {
-            Console.Title = "Overwolf patcher by Decode 1.1";
-            
+            Console.Title = "Overwolf patcher by Decode 1.2";
+
+            const string outplayedId = "cghphpbjeabdkomiphingnegihoigeggcfphdofo";
+
+            string overwolfPath = "";
+            string overwolfDataPath = "";
+            string overwolfExtensionsPath = "";
             string overwolfCorePath = "";
             string overwolfCoreCUPath = "";
 
@@ -44,10 +50,18 @@ namespace OverwolfInsiderPatcher
                 Environment.Exit(0);
             }
 
+            RegistryKey registryKey = Registry.LocalMachine;
+            registryKey = registryKey.OpenSubKey(@"SOFTWARE\WOW6432Node\Overwolf");
+            overwolfPath = registryKey.GetValue("InstallFolder").ToString();
 
-            string winDir = Path.GetPathRoot(Environment.SystemDirectory);
+            registryKey = Registry.CurrentUser;
+            registryKey = registryKey.OpenSubKey(@"Software\Overwolf\Overwolf");
+            overwolfDataPath = registryKey.GetValue("UserDataFolder").ToString();
+            overwolfExtensionsPath = overwolfDataPath + @"\Extensions\";
+
+
             Console.WriteLine();
-            string[] directories = Directory.GetDirectories(winDir + "Program Files (x86)\\Overwolf");
+            string[] directories = Directory.GetDirectories(overwolfPath);
             foreach (string dir in directories)
             {
                 if (File.Exists(dir + "\\OverWolf.Client.Core.dll"))
@@ -93,8 +107,9 @@ namespace OverwolfInsiderPatcher
             {
                 Console.WriteLine();
                 Console.WriteLine();
-                Console.WriteLine("|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
-                Console.WriteLine("||                         OverWolf.Client.Core.dll                      ||");
+                Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
+                Console.WriteLine("||                         OverWolf.Client.Core.dll                       ||");
+                Console.WriteLine("||                                                                        ||");
                 var resolver = new DefaultAssemblyResolver();
                 resolver.AddSearchDirectory(Path.GetDirectoryName(overwolfCorePath));
                 ReaderParameters reader = new ReaderParameters { AssemblyResolver = resolver, ReadWrite = true, ReadingMode = ReadingMode.Immediate, InMemory = true };
@@ -102,15 +117,15 @@ namespace OverwolfInsiderPatcher
                 TypeDefinition overwolfCoreWManager = overwolfCore.MainModule.GetType("OverWolf.Client.Core.Managers.WindowsInsiderSupportHelper");
                 if (overwolfCoreWManager != null)
                 {
-                    Console.WriteLine("|| OverWolf.Client.Core.Managers.WindowsInsiderSupportHelper type found! ||");
+                    Console.WriteLine("|| OverWolf.Client.Core.Managers.WindowsInsiderSupportHelper type found!  ||");
                     MethodDefinition showInsiderBlockMessageMethod = overwolfCoreWManager.Methods.SingleOrDefault(x => x.Name == "ShowInsiderBlockMessage");
                     if (showInsiderBlockMessageMethod != null)
                     {
-                        Console.WriteLine("|| -- ShowInsiderBlockMessage method found!                              ||");
+                        Console.WriteLine("|| -- ShowInsiderBlockMessage method found!                               ||");
                         showInsiderBlockMessageMethod.Body.Instructions.Clear();
                         showInsiderBlockMessageMethod.Body.Instructions.Add(Instruction.Create(OpCodes.Ldc_I4_0));
                         showInsiderBlockMessageMethod.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
-                        Console.WriteLine("|| ---- ShowInsiderBlockMessage method patched!                          ||");
+                        Console.WriteLine("|| ---- ShowInsiderBlockMessage method patched!                           ||");
 
                         TypeDefinition overwolfCoreIU = overwolfCore.MainModule.GetType("OverWolf.Client.Core.ODKv2.OverwolfInternalUtils");
                         if (overwolfCoreIU != null)
@@ -135,7 +150,7 @@ namespace OverwolfInsiderPatcher
                                 File.Delete(backupFilePath);
                             File.Copy(overwolfCorePath, backupFilePath);
                             overwolfCore.Write(overwolfCorePath);
-                            Console.WriteLine("|| ------ Patched successfully                                           ||");
+                            Console.WriteLine("|| ------ Patched successfully                                            ||");
                         }
                         catch (System.UnauthorizedAccessException)
                         {
@@ -156,7 +171,7 @@ namespace OverwolfInsiderPatcher
                 {
                     Console.WriteLine("OverWolf.Client.Core.Managers.WindowsInsiderSupportHelper type not found!");
                 }
-                Console.WriteLine("|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
+                Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
             }
 
             if (File.Exists(overwolfCoreCUPath))
@@ -165,6 +180,7 @@ namespace OverwolfInsiderPatcher
                 Console.WriteLine();
                 Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
                 Console.WriteLine("||                      OverWolf.Client.CommonUtils.dll                   ||");
+                Console.WriteLine("||                                                                        ||");
                 var resolver = new DefaultAssemblyResolver();
                 resolver.AddSearchDirectory(Path.GetDirectoryName(overwolfCoreCUPath));
                 ReaderParameters reader = new ReaderParameters { AssemblyResolver = resolver, ReadWrite = true, ReadingMode = ReadingMode.Immediate, InMemory = true };
@@ -214,6 +230,33 @@ namespace OverwolfInsiderPatcher
                 }
                 Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
             }
+
+            if (Directory.Exists(overwolfExtensionsPath + outplayedId))
+            {
+                Console.WriteLine();
+                Console.WriteLine();
+                Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
+                Console.WriteLine("||                               Outplayed                                ||");
+                Console.WriteLine("||                                                                        ||");
+                string[] outplayedVersionsPath = Directory.GetDirectories(overwolfExtensionsPath + outplayedId);
+                string outplayedPath = outplayedVersionsPath.LastOrDefault();
+                if(String.IsNullOrEmpty(outplayedPath) == false)
+                {
+                    string indexScripts = File.ReadAllText(outplayedPath + "\\indexScripts.js");
+                    indexScripts = indexScripts.Replace("null !== (e = null == t ? void 0 : t.includes(this._subscriptionPlan)) && void 0 !== e && e", "true"); // Делает "premium"
+                    indexScripts = indexScripts.Replace("className: \"app-aside\"", "className: \"app-aside1\"");  // Удаляет на главной странице пустое место от рекламы
+                    File.WriteAllText(outplayedPath + "\\indexScripts.js", indexScripts);
+                    Console.WriteLine("|| -- [indexScripts.js] Patched successfully                              ||");
+
+                    string backgroundScripts = File.ReadAllText(outplayedPath + "\\backgroundScripts.js");
+                    backgroundScripts = backgroundScripts.Replace("return 0 !== t.length;", "return true;"); // Делает "premium"
+                    File.WriteAllText(outplayedPath + "\\backgroundScripts.js", backgroundScripts);
+                    Console.WriteLine("|| -- [backgroundScripts.js] Patched successfully                         ||");
+                    Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
+                }
+            }
+
+
 
 
             Console.WriteLine();
