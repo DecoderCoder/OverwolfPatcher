@@ -1,0 +1,5 @@
+C:\Users\ByDec\source\repos\OverwolfInsiderPatcher\OverwolfInsiderPatcher\bin\Release\OverwolfInsiderPatcher.exe.config
+C:\Users\ByDec\source\repos\OverwolfInsiderPatcher\OverwolfInsiderPatcher\obj\Release\OverwolfInsiderPatcher.csproj.AssemblyReference.cache
+C:\Users\ByDec\source\repos\OverwolfInsiderPatcher\OverwolfInsiderPatcher\obj\Release\OverwolfInsiderPatcher.csproj.CoreCompileInputs.cache
+C:\Users\ByDec\source\repos\OverwolfInsiderPatcher\OverwolfInsiderPatcher\obj\Release\OverwolfInsiderPatcher.exe
+C:\Users\ByDec\source\repos\OverwolfInsiderPatcher\OverwolfInsiderPatcher\obj\Release\OverwolfInsiderPatcher.pdb
