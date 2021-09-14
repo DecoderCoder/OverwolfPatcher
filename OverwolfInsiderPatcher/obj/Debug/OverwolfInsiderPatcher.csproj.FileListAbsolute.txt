@@ -1,4 +1,8 @@
 C:\Users\ByDec\source\repos\OverwolfInsiderPatcher\OverwolfInsiderPatcher\bin\Debug\OverwolfInsiderPatcher.exe.config
+C:\Users\ByDec\source\repos\OverwolfInsiderPatcher\OverwolfInsiderPatcher\obj\Debug\OverwolfInsiderPatcher.csproj.AssemblyReference.cache
+C:\Users\ByDec\source\repos\OverwolfInsiderPatcher\OverwolfInsiderPatcher\obj\Debug\OverwolfInsiderPatcher.csproj.CoreCompileInputs.cache
+C:\Users\ByDec\source\repos\OverwolfInsiderPatcher\OverwolfInsiderPatcher\obj\Debug\OverwolfInsiderPatcher.exe
+C:\Users\ByDec\source\repos\OverwolfInsiderPatcher\OverwolfInsiderPatcher\obj\Debug\OverwolfInsiderPatcher.pdb
 C:\Users\ByDec\source\repos\OverwolfInsiderPatcher\OverwolfInsiderPatcher\bin\Debug\OverwolfInsiderPatcher.exe
 C:\Users\ByDec\source\repos\OverwolfInsiderPatcher\OverwolfInsiderPatcher\bin\Debug\OverwolfInsiderPatcher.pdb
 C:\Users\ByDec\source\repos\OverwolfInsiderPatcher\OverwolfInsiderPatcher\bin\Debug\Mono.Cecil.dll
@@ -9,8 +13,4 @@ C:\Users\ByDec\source\repos\OverwolfInsiderPatcher\OverwolfInsiderPatcher\bin\De
 C:\Users\ByDec\source\repos\OverwolfInsiderPatcher\OverwolfInsiderPatcher\bin\Debug\Mono.Cecil.Mdb.pdb
 C:\Users\ByDec\source\repos\OverwolfInsiderPatcher\OverwolfInsiderPatcher\bin\Debug\Mono.Cecil.Pdb.pdb
 C:\Users\ByDec\source\repos\OverwolfInsiderPatcher\OverwolfInsiderPatcher\bin\Debug\Mono.Cecil.Rocks.pdb
-C:\Users\ByDec\source\repos\OverwolfInsiderPatcher\OverwolfInsiderPatcher\obj\Debug\OverwolfInsiderPatcher.csproj.AssemblyReference.cache
-C:\Users\ByDec\source\repos\OverwolfInsiderPatcher\OverwolfInsiderPatcher\obj\Debug\OverwolfInsiderPatcher.csproj.CoreCompileInputs.cache
 C:\Users\ByDec\source\repos\OverwolfInsiderPatcher\OverwolfInsiderPatcher\obj\Debug\OverwolfInsiderPatcher.csproj.CopyComplete
-C:\Users\ByDec\source\repos\OverwolfInsiderPatcher\OverwolfInsiderPatcher\obj\Debug\OverwolfInsiderPatcher.exe
-C:\Users\ByDec\source\repos\OverwolfInsiderPatcher\OverwolfInsiderPatcher\obj\Debug\OverwolfInsiderPatcher.pdb
