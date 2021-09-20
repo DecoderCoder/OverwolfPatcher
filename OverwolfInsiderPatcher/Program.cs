@@ -1,21 +1,34 @@
 ﻿using Microsoft.Win32;
-using Mono.Cecil;
-using Mono.Cecil.Cil;
 using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Principal;
+using Mono.Cecil;
+using Mono.Cecil.Cil;
 
 namespace OverwolfInsiderPatcher
 {
     class Program
     {
+        static string Log(string text, int length = 73)
+        {
+            text = "|| " + text;
+            for (int i = 0; text.Length < length; i++)
+            {
+                text += " ";
+            }
+            text = text + " ||";
+            Console.WriteLine(text);
+            return text;
+        }
+
         static void Main()
         {
-            Console.Title = "Overwolf patcher by Decode 1.2";
+            Console.Title = "Overwolf patcher by Decode 1.3";
 
             const string outplayedId = "cghphpbjeabdkomiphingnegihoigeggcfphdofo";
+            const string porofessorId = "pibhbkkgefgheeglaeemkkfjlhidhcedalapdggh";
 
             string overwolfPath = "";
             string overwolfDataPath = "";
@@ -240,20 +253,91 @@ namespace OverwolfInsiderPatcher
                 Console.WriteLine("||                                                                        ||");
                 string[] outplayedVersionsPath = Directory.GetDirectories(overwolfExtensionsPath + outplayedId);
                 string outplayedPath = outplayedVersionsPath.LastOrDefault();
-                if(String.IsNullOrEmpty(outplayedPath) == false)
+                if (String.IsNullOrEmpty(outplayedPath) == false)
                 {
                     string indexScripts = File.ReadAllText(outplayedPath + "\\indexScripts.js");
-                    indexScripts = indexScripts.Replace("null !== (e = null == t ? void 0 : t.includes(this._subscriptionPlan)) && void 0 !== e && e", "true"); // Делает "premium"
-                    indexScripts = indexScripts.Replace("className: \"app-aside\"", "className: \"app-aside1\"");  // Удаляет на главной странице пустое место от рекламы
-                    File.WriteAllText(outplayedPath + "\\indexScripts.js", indexScripts);
-                    Console.WriteLine("|| -- [indexScripts.js] Patched successfully                              ||");
+                    if (indexScripts.Contains("null !== (e = null == t ? void 0 : t.includes(this._subscriptionPlan)) && void 0 !== e && e"))
+                    {
+                        indexScripts = indexScripts.Replace("null !== (e = null == t ? void 0 : t.includes(this._subscriptionPlan)) && void 0 !== e && e", "true"); // Делает "premium"
+                                                                                                                                                                    //indexScripts = indexScripts.Replace("className: \"app-aside\"", "className: \"app-aside1\"");  // Удаляет на главной странице пустое место от рекламы // Оказывается там есть переключатель и это лишнее
+                        File.WriteAllText(outplayedPath + "\\indexScripts.js", indexScripts);
+                        Console.WriteLine("|| -- [indexScripts.js] Patched successfully                              ||");
+                    }
+                    else
+                    {
+                        Console.WriteLine("|| -- [indexScripts.js] Patch failed or already patched                   ||");
+                    }
 
                     string backgroundScripts = File.ReadAllText(outplayedPath + "\\backgroundScripts.js");
-                    backgroundScripts = backgroundScripts.Replace("return 0 !== t.length;", "return true;"); // Делает "premium"
-                    File.WriteAllText(outplayedPath + "\\backgroundScripts.js", backgroundScripts);
-                    Console.WriteLine("|| -- [backgroundScripts.js] Patched successfully                         ||");
+                    if (backgroundScripts.Contains("return 0 !== t.length;"))
+                    {
+                        backgroundScripts = backgroundScripts.Replace("return 0 !== t.length;", "return true;"); // Делает "premium"
+                        File.WriteAllText(outplayedPath + "\\backgroundScripts.js", backgroundScripts);
+                        Console.WriteLine("|| -- [backgroundScripts.js] Patched successfully                         ||");
+                    }
+                    else
+                    {
+                        Console.WriteLine("|| -- [backgroundScripts.js] Patch failed or already patched              ||");
+                    }
+
                     Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
                 }
+            }
+
+            if (Directory.Exists(overwolfExtensionsPath + porofessorId))
+            {
+                Console.WriteLine();
+                Console.WriteLine();
+                Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
+                Console.WriteLine("||                               Porofessor                               ||");
+                Console.WriteLine("||                                                                        ||");
+                string[] porofessorVersionsPath = Directory.GetDirectories(overwolfExtensionsPath + porofessorId);
+                string porofessorPath = porofessorVersionsPath.LastOrDefault();
+                if (String.IsNullOrEmpty(porofessorPath) == false)
+                {
+                    string[] windows = Directory.GetFiles(porofessorPath + "\\windows\\");
+                    foreach (string window in windows)
+                    {
+                        string file = File.ReadAllText(window);
+                        const string adContainer = "<div id=\"ad-container\"><div id=\"ad-div\" class=\"ad\"></div></div>";
+                        if (file.Contains("<div id=\"ad-container\">"))
+                        {
+                            file = file.Replace(adContainer, "<!-- Ad Patched -->");
+
+                            if (!file.Contains("<!-- Ad Patched -->"))
+                            {
+                                string adBegin = "<div id=\"ad-container\">";
+                                string adEnd = "		</div>";
+
+                                int adBeginIndex = file.IndexOf(adBegin);
+                                if (adBeginIndex > 0)
+                                {
+                                    int adEndIndex = file.Substring(adBeginIndex).IndexOf(adEnd);
+
+                                    string firstPart = file.Substring(0, adBeginIndex);
+                                    string secondPart = file.Substring(adBeginIndex + adEndIndex + adEnd.Length);
+                                    file = firstPart + secondPart;
+                                }
+
+                            }
+
+                            File.WriteAllText(window, file);
+                            Log("-- [" + Path.GetFileName(window) + "] Patched successfuly");
+                        }
+                        else
+                        {
+                            if (file.Contains("<!-- Ad Patched -->"))
+                            {
+                                Log("-- [" + Path.GetFileName(window) + "] Already patched");
+                            }
+                            else
+                            {
+                                Log("-- [" + Path.GetFileName(window) + "] Not patched");
+                            }
+                        }
+                    }
+                }
+                Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
             }
 
 
