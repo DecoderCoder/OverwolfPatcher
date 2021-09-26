@@ -6,6 +6,7 @@ using System.Linq;
 using System.Security.Principal;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
+using System.Collections.Generic;
 
 namespace OverwolfInsiderPatcher
 {
@@ -23,12 +24,52 @@ namespace OverwolfInsiderPatcher
             return text;
         }
 
+        static List<string> removeFromToRow(string from, string where, string to, string insert = "")
+        {
+            List<string> list;
+            if (where.Contains("\r\n"))
+                list = where.Split(new[] { "\r\n" }, StringSplitOptions.None).ToList();
+            else
+                list = where.Split(new[] { "\n" }, StringSplitOptions.None).ToList();
+            return removeFromToRow(from, list, to, insert);
+        }
+
+        static List<string> removeFromToRow(string from, List<string> where, string to, string insert = "")
+        {
+            int start = -1;
+            int end = -1;
+            for (int i = 0; i < where.Count; i++)
+            {
+                if (where[i] == from)
+                {
+                    start = i;
+                }
+                if (start != -1 && where[i] == to)
+                {
+                    end = i;
+                    break;
+                }
+            }
+
+            if (start != -1 && end != -1)
+            {
+                where.RemoveRange(start, end - start + 1);
+            }
+            if (insert != "")
+            {
+                where.Insert(start, insert);
+            }
+
+            return where;
+        }
+
         static void Main()
         {
-            Console.Title = "Overwolf patcher by Decode 1.3";
+            Console.Title = "Overwolf patcher by Decode 1.31";
 
             const string outplayedId = "cghphpbjeabdkomiphingnegihoigeggcfphdofo";
             const string porofessorId = "pibhbkkgefgheeglaeemkkfjlhidhcedalapdggh";
+            const string orcaId = "peejkhfmgjhlnpgbkeoeakaaiicegdmoahhkfcgp";
 
             string overwolfPath = "";
             string overwolfDataPath = "";
@@ -306,23 +347,19 @@ namespace OverwolfInsiderPatcher
 
                             if (!file.Contains("<!-- Ad Patched -->"))
                             {
-                                string adBegin = "<div id=\"ad-container\">";
+                                string adBegin = "		<div id=\"ad-container\">";
                                 string adEnd = "		</div>";
 
-                                int adBeginIndex = file.IndexOf(adBegin);
-                                if (adBeginIndex > 0)
-                                {
-                                    int adEndIndex = file.Substring(adBeginIndex).IndexOf(adEnd);
-
-                                    string firstPart = file.Substring(0, adBeginIndex);
-                                    string secondPart = file.Substring(adBeginIndex + adEndIndex + adEnd.Length);
-                                    file = firstPart + secondPart;
-                                }
-
+                                file = String.Join("\r\n", removeFromToRow(adBegin, file, adEnd, "<!-- Ad Patched -->"));
+                                Log("-- [" + Path.GetFileName(window) + "] Patched successfuly | Method 2");
+                            }
+                            else
+                            {
+                                Log("-- [" + Path.GetFileName(window) + "] Patched successfuly | Method 1");
                             }
 
                             File.WriteAllText(window, file);
-                            Log("-- [" + Path.GetFileName(window) + "] Patched successfuly");
+
                         }
                         else
                         {
@@ -337,6 +374,65 @@ namespace OverwolfInsiderPatcher
                         }
                     }
                 }
+                Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
+            }
+
+
+            if (Directory.Exists(overwolfExtensionsPath + orcaId))
+            {
+                Console.WriteLine();
+                Console.WriteLine();
+                Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
+                Console.WriteLine("||                                  Orca                                  ||");
+                Console.WriteLine("||                                                                        ||");
+                string[] orcaVersionsPath = Directory.GetDirectories(overwolfExtensionsPath + orcaId);
+                string orcaPath = orcaVersionsPath.LastOrDefault();
+                if (String.IsNullOrEmpty(orcaPath) == false)
+                {
+                    if (File.Exists(orcaPath + "\\dist\\desktop\\desktop.html"))
+                    {
+                        string desktopFile = File.ReadAllText(orcaPath + "\\dist\\desktop\\desktop.html");
+                        if (!desktopFile.Contains("<!-- Ad Patched -->"))
+                        {
+                            // Удаление всего блока ломает вёрстку
+                            // File.WriteAllLines(orcaPath + "\\dist\\desktop\\desktop.html", removeFromToRow("      <div id=\"right\">", desktopFile, "      </div>", "<!-- Ad Patched -->"));
+
+                            // Просто скрывает рекламу, а не убирает блок с ней
+                            desktopFile = desktopFile.Replace("\n      <div id=\"right\">", "      <div id=\"right\" style=\"visibility: hidden;\"> <!-- Ad Patched -->");
+                            Log("-- [desktop.html] Patched successfuly");
+                        }
+                        else
+                        {
+                            Log("-- [desktop.html] Already patched");
+                        }
+                        File.WriteAllText(orcaPath + "\\dist\\desktop\\desktop.html", desktopFile);
+                    }
+
+                    if (File.Exists(orcaPath + "\\dist\\in_game\\in_game.html"))
+                    {
+                        string inGameFile = File.ReadAllText(orcaPath + "\\dist\\in_game\\in_game.html");
+                        if (!inGameFile.Contains("<!-- Ad Patched -->"))
+                        {                            
+                            // Удаление всего блока ломает вёрстку
+                            // File.WriteAllLines(orcaPath + "\\dist\\in_game\\in_game.html", removeFromToRow("      <div id=\"right\">", desktopFile, "      </div>", "<!-- Ad Patched -->"));
+
+                            // Просто скрывает рекламу, а не убирает блок с ней
+                            inGameFile = inGameFile.Replace("<div id=\"ad-div\" class=\"ad-div\"></div>", "<!-- Ad Patched -->");
+                            inGameFile = inGameFile.Replace("id=\"inGamePanelBackground\" hidden", "id=\"inGamePanelBackground\" style=\"width: 743px;\"");  // <div class="background" id="inGamePanelBackground" hidden="true"></div>
+                            inGameFile = inGameFile.Replace("id=\"closewindowtrayingame\" class", "id=\"closewindowtrayingame\" style=\"margin-left: 630px;\" class");  // <div class="background" id="inGamePanelBackground" hidden="true"></div>
+                            inGameFile = inGameFile.Replace("id=\"closeButton\" class", "id=\"closeButton\" style=\"margin-left: 630px;\" class");  // <div class="background" id="inGamePanelBackground" hidden="true"></div>
+                            inGameFile = inGameFile.Replace("id=\"minimazeButton\" class", "id=\"minimazeButton\" style=\"margin-left: 667px;\" class");  // <div class="background" id="inGamePanelBackground" hidden="true"></div>
+
+                            Log("-- [in_game.html] Patched successfuly");
+                        }
+                        else
+                        {
+                            Log("-- [in_game.html] Already patched");
+                        }
+                        File.WriteAllText(orcaPath + "\\dist\\in_game\\in_game.html", inGameFile);
+                    }
+                }
+
                 Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
             }
 
