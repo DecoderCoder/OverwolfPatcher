@@ -306,7 +306,7 @@ namespace OverwolfInsiderPatcher
                 TypeDefinition overwolfExtensionsValidation = overwolfExtensions.MainModule.GetType("Overwolf.Extensions.Validation.ConentVerifiyJob");
                 if (overwolfExtensionsValidation != null)
                 {
-                    Console.WriteLine("|| Overwolf.Extensions.Validation.ConentVerifiyJob type found!            ||");
+                    Console.WriteLine("|| Overwolf.Extensions.Validation.ConentVerifyJob type found!             ||");
                     List<MethodDefinition> VerifyFileSyncMethods = overwolfExtensionsValidation.Methods.Where(x => x.Name == "VerifyFileSync").ToList();
                     if (VerifyFileSyncMethods.Count == 0)
                     {
