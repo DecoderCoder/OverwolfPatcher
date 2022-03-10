@@ -65,7 +65,7 @@ namespace OverwolfInsiderPatcher
 
         static void Main()
         {
-            Console.Title = "Overwolf patcher by Decode 1.31";
+            Console.Title = "Overwolf patcher by Decode 1.32";
 
             const string outplayedId = "cghphpbjeabdkomiphingnegihoigeggcfphdofo";
             const string porofessorId = "pibhbkkgefgheeglaeemkkfjlhidhcedalapdggh";
@@ -76,6 +76,7 @@ namespace OverwolfInsiderPatcher
             string overwolfExtensionsPath = "";
             string overwolfCorePath = "";
             string overwolfCoreCUPath = "";
+            string overwolfExtensionsDllPath = ""; // Overwolf.Extensions.dll
 
             bool isElevated;
             using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
@@ -128,6 +129,11 @@ namespace OverwolfInsiderPatcher
                     overwolfCoreCUPath = dir + "\\OverWolf.Client.CommonUtils.dll";
                     Console.WriteLine("OverWolf.Client.CommonUtils.dll found!");
                 }
+                if (File.Exists(dir + "\\Overwolf.Extensions.dll"))
+                {
+                    overwolfExtensionsDllPath = dir + "\\Overwolf.Extensions.dll";
+                    Console.WriteLine("Overwolf.Extensions.dll found!");
+                }
             }
             //Console.Write("Enter \"Overwolf.Client.Core.dll\" path");
             //if (overwolfCorePath != "")
@@ -165,14 +171,14 @@ namespace OverwolfInsiderPatcher
                 Console.WriteLine("||                         OverWolf.Client.Core.dll                       ||");
                 Console.WriteLine("||                                                                        ||");
                 var resolver = new DefaultAssemblyResolver();
-                resolver.AddSearchDirectory(Path.GetDirectoryName(overwolfCorePath));
-                ReaderParameters reader = new ReaderParameters { AssemblyResolver = resolver, ReadWrite = true, ReadingMode = ReadingMode.Immediate, InMemory = true };
+                resolver.AddSearchDirectory(Path.GetDirectoryName(overwolfCorePath));                
+                ReaderParameters reader = new ReaderParameters { AssemblyResolver = resolver, ReadWrite = true, InMemory = true };                
                 AssemblyDefinition overwolfCore = AssemblyDefinition.ReadAssembly(overwolfCorePath, reader);
-                TypeDefinition overwolfCoreWManager = overwolfCore.MainModule.GetType("OverWolf.Client.Core.Managers.WindowsInsiderSupportHelper");
+                TypeDefinition overwolfCoreWManager = overwolfCore.MainModule.GetType("OverWolf.Client.Core.Managers.WindowsInsiderSupportHelper");                
                 if (overwolfCoreWManager != null)
                 {
                     Console.WriteLine("|| OverWolf.Client.Core.Managers.WindowsInsiderSupportHelper type found!  ||");
-                    MethodDefinition showInsiderBlockMessageMethod = overwolfCoreWManager.Methods.SingleOrDefault(x => x.Name == "ShowInsiderBlockMessage");
+                    MethodDefinition showInsiderBlockMessageMethod = overwolfCoreWManager.Methods.SingleOrDefault(x => x.Name == "ShowInsiderBlockMessage");                    
                     if (showInsiderBlockMessageMethod != null)
                     {
                         Console.WriteLine("|| -- ShowInsiderBlockMessage method found!                               ||");
@@ -194,7 +200,7 @@ namespace OverwolfInsiderPatcher
                                         instr.Operand = instr.Operand.ToString() + " (Patched by Decode)";
                                     }
                                 }
-                            }
+                            }                            
                         }
 
                         try
@@ -218,13 +224,13 @@ namespace OverwolfInsiderPatcher
                     else
                     {
                         Console.WriteLine("|| ShowInsiderBlockMessage not found!                                    ||");
-                    }
-
+                    }                 
                 }
                 else
                 {
                     Console.WriteLine("OverWolf.Client.Core.Managers.WindowsInsiderSupportHelper type not found!");
                 }
+                resolver.Dispose();
                 Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
             }
 
@@ -282,6 +288,60 @@ namespace OverwolfInsiderPatcher
                 {
                     Console.WriteLine("OverWolf.Client.CommonUtils.Features.CommonFeatures type not found!");
                 }
+                resolver.Dispose();
+                Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
+            }
+
+            if (File.Exists(overwolfExtensionsDllPath))
+            {
+                Console.WriteLine();
+                Console.WriteLine();
+                Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
+                Console.WriteLine("||                             OverWolf.Extensions                        ||");
+                Console.WriteLine("||                                                                        ||");
+                var resolver = new DefaultAssemblyResolver();
+                resolver.AddSearchDirectory(Path.GetDirectoryName(overwolfExtensionsDllPath));
+                ReaderParameters reader = new ReaderParameters { AssemblyResolver = resolver, ReadWrite = true, ReadingMode = ReadingMode.Immediate, InMemory = true };
+                AssemblyDefinition overwolfExtensions = AssemblyDefinition.ReadAssembly(overwolfExtensionsDllPath, reader);
+                TypeDefinition overwolfExtensionsValidation = overwolfExtensions.MainModule.GetType("Overwolf.Extensions.Validation.ConentVerifiyJob");
+                if (overwolfExtensionsValidation != null)
+                {
+                    Console.WriteLine("|| Overwolf.Extensions.Validation.ConentVerifiyJob type found!            ||");
+                    List<MethodDefinition> VerifyFileSyncMethods = overwolfExtensionsValidation.Methods.Where(x => x.Name == "VerifyFileSync").ToList();
+                    if (VerifyFileSyncMethods.Count == 0)
+                    {
+                        Console.WriteLine("VerifyFileSyncMethods not found!");
+                    }
+                    //try
+                    //{
+                    //    string backupFilePath = Path.GetDirectoryName(overwolfExtensionsDllPath) + "\\" + Path.GetFileNameWithoutExtension(overwolfExtensionsDllPath) + "_bak.dll";
+                    //    if (File.Exists(backupFilePath))
+                    //        File.Delete(backupFilePath);
+                    //    File.Copy(overwolfExtensionsDllPath, backupFilePath);                        
+                    //}
+                    //catch (System.UnauthorizedAccessException)
+                    //{
+                    //    Console.WriteLine("Permission denied");
+                    //}
+                    foreach (MethodDefinition VerifyFileSync in VerifyFileSyncMethods)
+                    {
+                        Console.WriteLine("|| -- VerifyFileSyncMethod found!                                         ||");
+                        VerifyFileSync.Body.Variables.Clear();
+                        VerifyFileSync.Body.Instructions.Clear();
+                        VerifyFileSync.Body.ExceptionHandlers.Clear();
+                        VerifyFileSync.Body.Instructions.Add(Instruction.Create(OpCodes.Ldc_I4_0));
+                        VerifyFileSync.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+                        Console.WriteLine("|| ---- VerifyFileSyncMethod method patched!                              ||");
+                    }
+                    overwolfExtensions.Write(overwolfExtensionsDllPath);
+                    Console.WriteLine("|| ------ Patched successfully                                            ||");
+
+                }
+                else
+                {
+                    Console.WriteLine("OverWolf.Extensions.Validation type not found!");
+                }
+                resolver.Dispose();
                 Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
             }
 
@@ -412,7 +472,7 @@ namespace OverwolfInsiderPatcher
                     {
                         string inGameFile = File.ReadAllText(orcaPath + "\\dist\\in_game\\in_game.html");
                         if (!inGameFile.Contains("<!-- Ad Patched -->"))
-                        {                            
+                        {
                             // Удаление всего блока ломает вёрстку
                             // File.WriteAllLines(orcaPath + "\\dist\\in_game\\in_game.html", removeFromToRow("      <div id=\"right\">", desktopFile, "      </div>", "<!-- Ad Patched -->"));
 

@@ -54,6 +54,9 @@
   <PropertyGroup>
     <ApplicationIcon>IconFileOverwolf_32Bit_16_32_48_256.ico</ApplicationIcon>
   </PropertyGroup>
+  <PropertyGroup>
+    <StartupObject>OverwolfInsiderPatcher.Program</StartupObject>
+  </PropertyGroup>
   <ItemGroup>
     <Reference Include="Mono.Cecil, Version=0.11.4.0, Culture=neutral, PublicKeyToken=50cebf1cceb9d05e, processorArchitecture=MSIL">
       <HintPath>..\packages\Mono.Cecil.0.11.4\lib\net40\Mono.Cecil.dll</HintPath>
