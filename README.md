@@ -4,11 +4,11 @@ Patch Overwolf app to work on Windows Insider version and unlock new features
 
 Now premium will work wherever there is a subscription through Overwolf in any App
 
-# Porofessor.gg
+## Porofessor.gg
 
 ![screenshot](https://i.imgur.com/5DDAJde.png)
 
-# Outplayed
+## Outplayed
 
 ![screenshot](https://i.imgur.com/qXAtQJ8.png)
 
