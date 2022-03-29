@@ -14,9 +14,9 @@ Now premium will work wherever there is a subscription through Overwolf in any A
 
 
 
-* ~~ *Premium "Outplayed" (Need Overwolf account logged)~~
-* ~~ *Premium "Porofessor.gg"~~
-* ~~ *Premium "Orca"~~
+*~~*Premium "Outplayed" (Need Overwolf account logged)~~
+*~~*Premium "Porofessor.gg"~~
+*~~*Premium "Orca"~~
 
 ~~DevTools in any window (Overwolf windows and apps)~~
 
