@@ -65,17 +65,14 @@ namespace OverwolfInsiderPatcher
 
         static void Main()
         {
-            Console.Title = "Overwolf patcher by Decode 1.32";
-
-            const string outplayedId = "cghphpbjeabdkomiphingnegihoigeggcfphdofo";
-            const string porofessorId = "pibhbkkgefgheeglaeemkkfjlhidhcedalapdggh";
-            const string orcaId = "peejkhfmgjhlnpgbkeoeakaaiicegdmoahhkfcgp";
+            Console.Title = "Overwolf patcher by Decode 1.33";
 
             string overwolfPath = "";
             string overwolfDataPath = "";
             string overwolfExtensionsPath = "";
             string overwolfCorePath = "";
             string overwolfCoreCUPath = "";
+            string overwolfSubscriptionsPath = "";
             string overwolfExtensionsDllPath = ""; // Overwolf.Extensions.dll
 
             bool isElevated;
@@ -134,6 +131,11 @@ namespace OverwolfInsiderPatcher
                     overwolfExtensionsDllPath = dir + "\\Overwolf.Extensions.dll";
                     Console.WriteLine("Overwolf.Extensions.dll found!");
                 }
+                if (File.Exists(dir + "\\Overwolf.Subscriptions.dll"))
+                {
+                    overwolfSubscriptionsPath = dir + "\\Overwolf.Subscriptions.dll";
+                    Console.WriteLine("Overwolf.Subscriptions.dll found!");
+                }
             }
             //Console.Write("Enter \"Overwolf.Client.Core.dll\" path");
             //if (overwolfCorePath != "")
@@ -165,20 +167,21 @@ namespace OverwolfInsiderPatcher
             //Console.WriteLine(overwolfCoreCUNewPath);
             if (File.Exists(overwolfCorePath))
             {
+                bool successful = true;
                 Console.WriteLine();
                 Console.WriteLine();
                 Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
                 Console.WriteLine("||                         OverWolf.Client.Core.dll                       ||");
                 Console.WriteLine("||                                                                        ||");
-                var resolver = new DefaultAssemblyResolver();
-                resolver.AddSearchDirectory(Path.GetDirectoryName(overwolfCorePath));                
-                ReaderParameters reader = new ReaderParameters { AssemblyResolver = resolver, ReadWrite = true, InMemory = true };                
+                var resolver = new DefaultAssemblyResolver();                
+                resolver.AddSearchDirectory(Path.GetDirectoryName(overwolfCorePath));
+                ReaderParameters reader = new ReaderParameters { AssemblyResolver = resolver, ReadWrite = true, InMemory = true };
                 AssemblyDefinition overwolfCore = AssemblyDefinition.ReadAssembly(overwolfCorePath, reader);
-                TypeDefinition overwolfCoreWManager = overwolfCore.MainModule.GetType("OverWolf.Client.Core.Managers.WindowsInsiderSupportHelper");                
+                TypeDefinition overwolfCoreWManager = overwolfCore.MainModule.GetType("OverWolf.Client.Core.Managers.WindowsInsiderSupportHelper");
                 if (overwolfCoreWManager != null)
                 {
                     Console.WriteLine("|| OverWolf.Client.Core.Managers.WindowsInsiderSupportHelper type found!  ||");
-                    MethodDefinition showInsiderBlockMessageMethod = overwolfCoreWManager.Methods.SingleOrDefault(x => x.Name == "ShowInsiderBlockMessage");                    
+                    MethodDefinition showInsiderBlockMessageMethod = overwolfCoreWManager.Methods.SingleOrDefault(x => x.Name == "ShowInsiderBlockMessage");
                     if (showInsiderBlockMessageMethod != null)
                     {
                         Console.WriteLine("|| -- ShowInsiderBlockMessage method found!                               ||");
@@ -200,39 +203,155 @@ namespace OverwolfInsiderPatcher
                                         instr.Operand = instr.Operand.ToString() + " (Patched by Decode)";
                                     }
                                 }
-                            }                            
-                        }
-
-                        try
-                        {
-                            string backupFilePath = Path.GetDirectoryName(overwolfCorePath) + "\\" + Path.GetFileNameWithoutExtension(overwolfCorePath) + "_bak.dll";
-                            if (File.Exists(backupFilePath))
-                                File.Delete(backupFilePath);
-                            File.Copy(overwolfCorePath, backupFilePath);
-                            overwolfCore.Write(overwolfCorePath);
-                            Console.WriteLine("|| ------ Patched successfully                                            ||");
-                        }
-                        catch (System.UnauthorizedAccessException)
-                        {
-                            Console.WriteLine("Permission denied");
-                        }
-                        catch (Exception e)
-                        {
-                            Console.WriteLine(e);
+                            }
                         }
                     }
                     else
                     {
                         Console.WriteLine("|| ShowInsiderBlockMessage not found!                                    ||");
-                    }                 
+                    }
+
+                    TypeDefinition overwolfCoreProfile = overwolfCore.MainModule.GetType("OverWolf.Client.Core.ODKv2.Profile.OverwolfSubscription");
+                    if (overwolfCoreProfile != null)
+                    {
+                        Console.WriteLine("|| OverWolf.Client.Core.ODKv2.Profile.OverwolfSubscription type found!    ||");
+                        MethodDefinition overwolfCoreGES = overwolfCoreProfile.Methods.SingleOrDefault(x => x.Name == "GetExtensionSubscriptions");
+                        if (overwolfCoreGES != null)
+                        {
+                            Console.WriteLine("|| -- GetExtensionSubscriptions method found!                             ||");
+                            try
+                            {
+                                overwolfCoreGES = InjectMethods.OverwolfCoreGetExtensionSubscriptions(ref overwolfCore, overwolfCoreGES);
+                            } catch(Exception e)
+                            {
+                                successful = false;
+                                Console.WriteLine("Error, Overwolf.Core will not be patched: ");
+                                Console.WriteLine(e);
+                            }
+                        }
+                            
+                        //
+                    }
+
                 }
                 else
                 {
                     Console.WriteLine("OverWolf.Client.Core.Managers.WindowsInsiderSupportHelper type not found!");
                 }
+                string backupFilePath = Path.GetDirectoryName(overwolfCorePath) + "\\" + Path.GetFileNameWithoutExtension(overwolfCorePath) + "_bak.dll";
+
+                try
+                {
+                    if (File.Exists(backupFilePath))
+                        File.Delete(backupFilePath);
+                    File.Copy(overwolfCorePath, backupFilePath);
+                    if(successful)
+                    overwolfCore.Write(overwolfCorePath);
+                    Console.WriteLine("|| ------ Patched successfully                                            ||");
+                }
+                catch (System.UnauthorizedAccessException)
+                {
+                    Console.WriteLine("Permission denied");
+                }
+                catch (Exception e)
+                {
+                    File.Delete(overwolfCorePath);
+                    if (File.Exists(backupFilePath))
+                        File.Copy(backupFilePath, overwolfCorePath);
+                    Console.WriteLine(e);
+                }
                 resolver.Dispose();
                 Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
             }
+
+            if (File.Exists(overwolfSubscriptionsPath))
+            {
+                bool successful = true;
+                Console.WriteLine();
+                Console.WriteLine();
+                Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
+                Console.WriteLine("||                          Overwolf.Subscriptions.dll                    ||");
+                Console.WriteLine("||                                                                        ||");
+
+                var resolver = new DefaultAssemblyResolver();
+                resolver.AddSearchDirectory(Path.GetDirectoryName(overwolfCoreCUPath));
+                ReaderParameters reader = new ReaderParameters { AssemblyResolver = resolver, ReadWrite = true, ReadingMode = ReadingMode.Immediate, InMemory = true };
+                AssemblyDefinition overwolfSubscriptions = AssemblyDefinition.ReadAssembly(overwolfSubscriptionsPath, reader);
+                TypeDefinition overwolfSubscriptionsModel = overwolfSubscriptions.MainModule.GetType("Overwolf.Subscriptions.Model.Subscription");
+                TypeDefinition overwolfSubscriptionsModelInfo = overwolfSubscriptions.MainModule.GetType("Overwolf.Subscriptions.Model.Subscription/Info");
+                if (overwolfSubscriptionsModel != null)
+                {
+                    Console.WriteLine("|| OverWolf.Subscriptions.Model.Subscription type found!                  ||");
+                    foreach (var setMethod in overwolfSubscriptionsModel.Methods)
+                    {
+                        if (setMethod.Attributes.HasFlag(MethodAttributes.Private) && setMethod.Name.StartsWith("set_"))
+                        {
+                            setMethod.Attributes = setMethod.Attributes & ~MethodAttributes.Private;
+                            setMethod.Attributes = setMethod.Attributes | MethodAttributes.Public;
+                            Log(" -- Method " + setMethod.Name + " patched");
+                        }
+                    }
+                    Console.WriteLine("|| OverWolf.Subscriptions.Model.Subscription patched successful!          ||");
+
+                    Console.WriteLine("|| OverWolf.Subscriptions.Model.Subscription/Info type found!             ||");
+                    foreach (var setMethod in overwolfSubscriptionsModelInfo.Methods)
+                    {
+                        if (setMethod.Attributes.HasFlag(MethodAttributes.Private) && setMethod.Name.StartsWith("set_"))
+                        {
+                            setMethod.Attributes = setMethod.Attributes & ~MethodAttributes.Private;
+                            setMethod.Attributes = setMethod.Attributes | MethodAttributes.Public;
+                            Log(" -- Method " + setMethod.Name + " patched");
+                        }
+                    }
+                    Console.WriteLine("|| OverWolf.Subscriptions.Model.Subscription/Info patched successful!      ||");
+
+                    TypeDefinition overwolfCoreProfile = overwolfSubscriptions.MainModule.GetType("Overwolf.Subscriptions.Settings.SubscriptionRepository");
+                    if (overwolfCoreProfile != null)
+                    {
+                        Console.WriteLine("|| Overwolf.Subscriptions.Settings.SubscriptionRepository  type found!    ||");
+                        MethodDefinition overwolfCoreGES = overwolfCoreProfile.Methods.SingleOrDefault(x => x.Name == "GetExtensionSubscriptions");
+                        if (overwolfCoreGES != null)
+                        {
+                            Console.WriteLine("|| -- GetExtensionSubscriptions method found!                             ||");
+                            try
+                            {
+                                overwolfCoreGES = InjectMethods.OverwolfSubscriptionsGetExtensionSubscriptions(ref overwolfSubscriptions, overwolfCoreGES);
+                            }
+                            catch (Exception e)
+                            {
+                                successful = false;
+                                Console.WriteLine("Error, Overwolf.Subscriptions will not be patched: ");
+                                Console.WriteLine(e);
+                            }
+                        }
+                    }
+                }
+                string backupFilePath = Path.GetDirectoryName(overwolfSubscriptionsPath) + "\\" + Path.GetFileNameWithoutExtension(overwolfSubscriptionsPath) + "_bak.dll";
+
+                try
+                {
+                    if (File.Exists(backupFilePath))
+                        File.Delete(backupFilePath);
+                    File.Copy(overwolfSubscriptionsPath, backupFilePath);
+                    if (successful)
+                        overwolfSubscriptions.Write(overwolfSubscriptionsPath);
+                    Console.WriteLine("|| ------ Patched successfully                                            ||");
+                }
+                catch (System.UnauthorizedAccessException)
+                {
+                    Console.WriteLine("Permission denied");
+                }
+                catch (Exception e)
+                {
+                    File.Delete(overwolfSubscriptionsPath);
+                    if (File.Exists(backupFilePath))
+                        File.Copy(backupFilePath, overwolfSubscriptionsPath);
+                    Console.WriteLine(e);
+                }
+                resolver.Dispose();
+                Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
+            }
+
 
             if (File.Exists(overwolfCoreCUPath))
             {
@@ -312,17 +431,17 @@ namespace OverwolfInsiderPatcher
                     {
                         Console.WriteLine("VerifyFileSyncMethods not found!");
                     }
-                    //try
-                    //{
-                    //    string backupFilePath = Path.GetDirectoryName(overwolfExtensionsDllPath) + "\\" + Path.GetFileNameWithoutExtension(overwolfExtensionsDllPath) + "_bak.dll";
-                    //    if (File.Exists(backupFilePath))
-                    //        File.Delete(backupFilePath);
-                    //    File.Copy(overwolfExtensionsDllPath, backupFilePath);                        
-                    //}
-                    //catch (System.UnauthorizedAccessException)
-                    //{
-                    //    Console.WriteLine("Permission denied");
-                    //}
+                    try
+                    {
+                        string backupFilePath = Path.GetDirectoryName(overwolfExtensionsDllPath) + "\\" + Path.GetFileNameWithoutExtension(overwolfExtensionsDllPath) + "_bak.dll";
+                        if (File.Exists(backupFilePath))
+                            File.Delete(backupFilePath);
+                        File.Copy(overwolfExtensionsDllPath, backupFilePath);
+                    }
+                    catch (System.UnauthorizedAccessException)
+                    {
+                        Console.WriteLine("Permission denied");
+                    }
                     foreach (MethodDefinition VerifyFileSync in VerifyFileSyncMethods)
                     {
                         Console.WriteLine("|| -- VerifyFileSyncMethod found!                                         ||");
@@ -344,160 +463,6 @@ namespace OverwolfInsiderPatcher
                 resolver.Dispose();
                 Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
             }
-
-            if (Directory.Exists(overwolfExtensionsPath + outplayedId))
-            {
-                Console.WriteLine();
-                Console.WriteLine();
-                Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
-                Console.WriteLine("||                               Outplayed                                ||");
-                Console.WriteLine("||                                                                        ||");
-                string[] outplayedVersionsPath = Directory.GetDirectories(overwolfExtensionsPath + outplayedId);
-                string outplayedPath = outplayedVersionsPath.LastOrDefault();
-                if (String.IsNullOrEmpty(outplayedPath) == false)
-                {
-                    string indexScripts = File.ReadAllText(outplayedPath + "\\indexScripts.js");
-                    if (indexScripts.Contains("null !== (e = null == t ? void 0 : t.includes(this._subscriptionPlan)) && void 0 !== e && e"))
-                    {
-                        indexScripts = indexScripts.Replace("null !== (e = null == t ? void 0 : t.includes(this._subscriptionPlan)) && void 0 !== e && e", "true"); // Делает "premium"
-                                                                                                                                                                    //indexScripts = indexScripts.Replace("className: \"app-aside\"", "className: \"app-aside1\"");  // Удаляет на главной странице пустое место от рекламы // Оказывается там есть переключатель и это лишнее
-                        File.WriteAllText(outplayedPath + "\\indexScripts.js", indexScripts);
-                        Console.WriteLine("|| -- [indexScripts.js] Patched successfully                              ||");
-                    }
-                    else
-                    {
-                        Console.WriteLine("|| -- [indexScripts.js] Patch failed or already patched                   ||");
-                    }
-
-                    string backgroundScripts = File.ReadAllText(outplayedPath + "\\backgroundScripts.js");
-                    if (backgroundScripts.Contains("return 0 !== t.length;"))
-                    {
-                        backgroundScripts = backgroundScripts.Replace("return 0 !== t.length;", "return true;"); // Делает "premium"
-                        File.WriteAllText(outplayedPath + "\\backgroundScripts.js", backgroundScripts);
-                        Console.WriteLine("|| -- [backgroundScripts.js] Patched successfully                         ||");
-                    }
-                    else
-                    {
-                        Console.WriteLine("|| -- [backgroundScripts.js] Patch failed or already patched              ||");
-                    }
-
-                    Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
-                }
-            }
-
-            if (Directory.Exists(overwolfExtensionsPath + porofessorId))
-            {
-                Console.WriteLine();
-                Console.WriteLine();
-                Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
-                Console.WriteLine("||                               Porofessor                               ||");
-                Console.WriteLine("||                                                                        ||");
-                string[] porofessorVersionsPath = Directory.GetDirectories(overwolfExtensionsPath + porofessorId);
-                string porofessorPath = porofessorVersionsPath.LastOrDefault();
-                if (String.IsNullOrEmpty(porofessorPath) == false)
-                {
-                    string[] windows = Directory.GetFiles(porofessorPath + "\\windows\\");
-                    foreach (string window in windows)
-                    {
-                        string file = File.ReadAllText(window);
-                        const string adContainer = "<div id=\"ad-container\"><div id=\"ad-div\" class=\"ad\"></div></div>";
-                        if (file.Contains("<div id=\"ad-container\">"))
-                        {
-                            file = file.Replace(adContainer, "<!-- Ad Patched -->");
-
-                            if (!file.Contains("<!-- Ad Patched -->"))
-                            {
-                                string adBegin = "		<div id=\"ad-container\">";
-                                string adEnd = "		</div>";
-
-                                file = String.Join("\r\n", removeFromToRow(adBegin, file, adEnd, "<!-- Ad Patched -->"));
-                                Log("-- [" + Path.GetFileName(window) + "] Patched successfuly | Method 2");
-                            }
-                            else
-                            {
-                                Log("-- [" + Path.GetFileName(window) + "] Patched successfuly | Method 1");
-                            }
-
-                            File.WriteAllText(window, file);
-
-                        }
-                        else
-                        {
-                            if (file.Contains("<!-- Ad Patched -->"))
-                            {
-                                Log("-- [" + Path.GetFileName(window) + "] Already patched");
-                            }
-                            else
-                            {
-                                Log("-- [" + Path.GetFileName(window) + "] Not patched");
-                            }
-                        }
-                    }
-                }
-                Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
-            }
-
-
-            if (Directory.Exists(overwolfExtensionsPath + orcaId))
-            {
-                Console.WriteLine();
-                Console.WriteLine();
-                Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
-                Console.WriteLine("||                                  Orca                                  ||");
-                Console.WriteLine("||                                                                        ||");
-                string[] orcaVersionsPath = Directory.GetDirectories(overwolfExtensionsPath + orcaId);
-                string orcaPath = orcaVersionsPath.LastOrDefault();
-                if (String.IsNullOrEmpty(orcaPath) == false)
-                {
-                    if (File.Exists(orcaPath + "\\dist\\desktop\\desktop.html"))
-                    {
-                        string desktopFile = File.ReadAllText(orcaPath + "\\dist\\desktop\\desktop.html");
-                        if (!desktopFile.Contains("<!-- Ad Patched -->"))
-                        {
-                            // Удаление всего блока ломает вёрстку
-                            // File.WriteAllLines(orcaPath + "\\dist\\desktop\\desktop.html", removeFromToRow("      <div id=\"right\">", desktopFile, "      </div>", "<!-- Ad Patched -->"));
-
-                            // Просто скрывает рекламу, а не убирает блок с ней
-                            desktopFile = desktopFile.Replace("\n      <div id=\"right\">", "      <div id=\"right\" style=\"visibility: hidden;\"> <!-- Ad Patched -->");
-                            Log("-- [desktop.html] Patched successfuly");
-                        }
-                        else
-                        {
-                            Log("-- [desktop.html] Already patched");
-                        }
-                        File.WriteAllText(orcaPath + "\\dist\\desktop\\desktop.html", desktopFile);
-                    }
-
-                    if (File.Exists(orcaPath + "\\dist\\in_game\\in_game.html"))
-                    {
-                        string inGameFile = File.ReadAllText(orcaPath + "\\dist\\in_game\\in_game.html");
-                        if (!inGameFile.Contains("<!-- Ad Patched -->"))
-                        {
-                            // Удаление всего блока ломает вёрстку
-                            // File.WriteAllLines(orcaPath + "\\dist\\in_game\\in_game.html", removeFromToRow("      <div id=\"right\">", desktopFile, "      </div>", "<!-- Ad Patched -->"));
-
-                            // Просто скрывает рекламу, а не убирает блок с ней
-                            inGameFile = inGameFile.Replace("<div id=\"ad-div\" class=\"ad-div\"></div>", "<!-- Ad Patched -->");
-                            inGameFile = inGameFile.Replace("id=\"inGamePanelBackground\" hidden", "id=\"inGamePanelBackground\" style=\"width: 743px;\"");  // <div class="background" id="inGamePanelBackground" hidden="true"></div>
-                            inGameFile = inGameFile.Replace("id=\"closewindowtrayingame\" class", "id=\"closewindowtrayingame\" style=\"margin-left: 630px;\" class");  // <div class="background" id="inGamePanelBackground" hidden="true"></div>
-                            inGameFile = inGameFile.Replace("id=\"closeButton\" class", "id=\"closeButton\" style=\"margin-left: 630px;\" class");  // <div class="background" id="inGamePanelBackground" hidden="true"></div>
-                            inGameFile = inGameFile.Replace("id=\"minimazeButton\" class", "id=\"minimazeButton\" style=\"margin-left: 667px;\" class");  // <div class="background" id="inGamePanelBackground" hidden="true"></div>
-
-                            Log("-- [in_game.html] Patched successfuly");
-                        }
-                        else
-                        {
-                            Log("-- [in_game.html] Already patched");
-                        }
-                        File.WriteAllText(orcaPath + "\\dist\\in_game\\in_game.html", inGameFile);
-                    }
-                }
-
-                Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
-            }
-
-
-
 
             Console.WriteLine();
             Console.WriteLine();
