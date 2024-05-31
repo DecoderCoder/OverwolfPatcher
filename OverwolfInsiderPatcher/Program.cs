@@ -422,10 +422,10 @@ namespace OverwolfInsiderPatcher
                 resolver.AddSearchDirectory(Path.GetDirectoryName(overwolfExtensionsDllPath));
                 ReaderParameters reader = new ReaderParameters { AssemblyResolver = resolver, ReadWrite = true, ReadingMode = ReadingMode.Immediate, InMemory = true };
                 AssemblyDefinition overwolfExtensions = AssemblyDefinition.ReadAssembly(overwolfExtensionsDllPath, reader);
-                TypeDefinition overwolfExtensionsValidation = overwolfExtensions.MainModule.GetType("Overwolf.Extensions.Validation.ConentVerifiyJob");
+                TypeDefinition overwolfExtensionsValidation = overwolfExtensions.MainModule.GetType("Overwolf.Extensions.Validation.ContentVerifiyJob");
                 if (overwolfExtensionsValidation != null)
                 {
-                    Console.WriteLine("|| Overwolf.Extensions.Validation.ConentVerifyJob type found!             ||");
+                    Console.WriteLine("|| Overwolf.Extensions.Validation.ContentVerifyJob type found!             ||");
                     List<MethodDefinition> VerifyFileSyncMethods = overwolfExtensionsValidation.Methods.Where(x => x.Name == "VerifyFileSync").ToList();
                     if (VerifyFileSyncMethods.Count == 0)
                     {
