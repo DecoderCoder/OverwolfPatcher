@@ -56,6 +56,8 @@ Mirrors:
    - https://megalodon.jp/2024-0911-0640-19/https://github.com:443/DecoderCoder/OverwolfInsiderPatcher
    - https://github.com/Bluscream/OverwolfInsiderPatcher
    - https://web.archive.org/web/*/https://github.com/Bluscream/OverwolfInsiderPatcher*#
+   - https://archive.is/IsK5x
+   - https://megalodon.jp/2024-0911-0716-10/https://github.com:443/Bluscream/OverwolfInsiderPatcher/tree/main
    - https://gitlab.com/Bluscream/OverwolfInsiderPatcher
 
 - [Program.cs](https://github.com/DecoderCoder/OverwolfInsiderPatcher/blob/main/OverwolfInsiderPatcher/Program.cs)
