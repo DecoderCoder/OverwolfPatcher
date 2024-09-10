@@ -26,6 +26,8 @@ Now premium will work wherever there is a subscription through Overwolf in any A
 
 Mirrors:
 - [DecoderCoder/OverwolfInsiderPatcher](https://github.com/DecoderCoder/OverwolfInsiderPatcher)
+   - https://workupload.com/file/69sqwareKbs (OverwolfInsiderPatcher.zip)
+   - https://workupload.com/file/zT2pHRt6GDr (OverwolfInsiderPatcher.7z, pw=oip)
    - https://web.archive.org/web/*/https://github.com/DecoderCoder/OverwolfInsiderPatcher*#
    - https://archive.is/tlGKg
    - https://cc.bingj.com/cache.aspx?q=url%3ahttps%3a%2f%2fgithub.com%2fDecoderCoder%2fOverwolfInsiderPatcher&d=5044808902771814&mkt=en-US&setlang=en-US&w=CYpNiNbNWfP2HTxHG3FHXv25K-D-sYnb
