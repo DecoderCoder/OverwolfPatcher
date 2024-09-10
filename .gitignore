@@ -386,3 +386,7 @@ FodyWeavers.xsd
 # JetBrains Rider
 .idea/
 *.sln.iml
+
+
+# Custom Entries
+!OverwolfInsiderPatcher.exe
