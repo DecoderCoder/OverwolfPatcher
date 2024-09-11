@@ -12,6 +12,16 @@ namespace OverwolfInsiderPatcher
 {
     internal class InjectMethods
     {
+        public static void PatchReturn(ref MethodDefinition method, bool retVal)
+        {
+            method.Body.ExceptionHandlers.Clear();
+            method.Body.Variables.Clear();
+            method.Body.Instructions.Clear();
+
+            method.Body.Instructions.Add(Instruction.Create(retVal ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0));
+            method.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+        }
+
         public static MethodDefinition OverwolfCoreGetExtensionSubscriptions(ref AssemblyDefinition overwolfCore, MethodDefinition overwolfCoreGES)
         {
             overwolfCoreGES.Body.ExceptionHandlers.Clear();
@@ -19,7 +29,7 @@ namespace OverwolfInsiderPatcher
             overwolfCoreGES.Body.Instructions.Clear();
             GenericInstanceType list = new GenericInstanceType(overwolfCore.MainModule.ImportReference(typeof(List<>))); //overwolfCore.MainModule.Import();
             TypeReference DetailedActivePlan;
-            
+
             if (overwolfCore.MainModule.TryGetTypeReference("ODKv2API.DetailedActivePlan", out DetailedActivePlan)) // Get already imported class instead of import Overwolf.ODK.Common
             {
                 TypeDefinition DetailedActivePlanDef = DetailedActivePlan.Resolve();
@@ -28,12 +38,12 @@ namespace OverwolfInsiderPatcher
                 VariableDefinition iV = new VariableDefinition(overwolfCore.MainModule.ImportReference(typeof(int)));
                 overwolfCoreGES.Body.Variables.Add(dapV);
                 overwolfCoreGES.Body.Variables.Add(iV);
-                
+
                 {
 
                     TypeReference List = overwolfCore.MainModule.ImportReference(overwolfCore.MainModule.ImportReference(Type.GetType("System.Collections.Generic.List`1")).MakeGenericInstanceType(new TypeReference[] { DetailedActivePlan }));
-                  
-                   
+
+
                     MethodDefinition listCtor = List.Resolve().Methods.First(x => x.Name == ".ctor");
                     var listCtorRef = overwolfCore.MainModule.ImportReference(listCtor, List);
                     listCtorRef.DeclaringType = List;
@@ -56,7 +66,7 @@ namespace OverwolfInsiderPatcher
                     overwolfCoreGES.Body.Instructions[1] = (Instruction.Create(OpCodes.Stloc_0));
                     overwolfCoreGES.Body.Instructions[2] = (Instruction.Create(OpCodes.Ldc_I4_0));
                     overwolfCoreGES.Body.Instructions[3] = (Instruction.Create(OpCodes.Stloc_1));
-                    overwolfCoreGES.Body.Instructions[5] = (Instruction.Create(OpCodes.Ldloc_0));                    
+                    overwolfCoreGES.Body.Instructions[5] = (Instruction.Create(OpCodes.Ldloc_0));
                     overwolfCoreGES.Body.Instructions[6] = (Instruction.Create(OpCodes.Newobj, overwolfCore.MainModule.ImportReference(DetailedActivePlanDef.Methods.First(x => x.Name == ".ctor")))); // DetailedActivePlanR constructor
                     overwolfCoreGES.Body.Instructions[7] = (Instruction.Create(OpCodes.Dup));
                     overwolfCoreGES.Body.Instructions[8] = (Instruction.Create(OpCodes.Ldc_R4, 1.0f));
@@ -134,7 +144,7 @@ namespace OverwolfInsiderPatcher
                 overwolfCoreGES.Body.Instructions[2] = Instruction.Create(OpCodes.Stind_Ref);
                 overwolfCoreGES.Body.Instructions[3] = Instruction.Create(OpCodes.Ldarg_0);
                 overwolfCoreGES.Body.Instructions[4] = Instruction.Create(OpCodes.Call, overwolfSubscriptions.MainModule.GetType("Overwolf.Subscriptions.Settings.SubscriptionRepository").Methods.First(x => x.Name == "IsRequiredServiceUnavailable"));
- //
+                //
                 overwolfCoreGES.Body.Instructions[6] = Instruction.Create(OpCodes.Ldc_I4_0);
                 overwolfCoreGES.Body.Instructions[7] = Instruction.Create(OpCodes.Ret);
                 overwolfCoreGES.Body.Instructions[8] = Instruction.Create(OpCodes.Ldarg_1);

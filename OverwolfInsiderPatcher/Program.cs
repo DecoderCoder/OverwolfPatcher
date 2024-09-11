@@ -136,7 +136,7 @@ namespace OverwolfInsiderPatcher
                 {
                     overwolfSubscriptionsPath = dir + "\\Overwolf.Subscriptions.dll";
                     Console.WriteLine("Overwolf.Subscriptions.dll found!");
-                }             
+                }
                 if (File.Exists(dir + "\\OverWolf.Client.BL.dll"))
                 {
                     overwolfBDDllPath = dir + "\\OverWolf.Client.BL.dll";
@@ -179,7 +179,7 @@ namespace OverwolfInsiderPatcher
                 Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
                 Console.WriteLine("||                         OverWolf.Client.Core.dll                       ||");
                 Console.WriteLine("||                                                                        ||");
-                var resolver = new DefaultAssemblyResolver();                
+                var resolver = new DefaultAssemblyResolver();
                 resolver.AddSearchDirectory(Path.GetDirectoryName(overwolfCorePath));
                 ReaderParameters reader = new ReaderParameters { AssemblyResolver = resolver, ReadWrite = true, InMemory = true };
                 AssemblyDefinition overwolfCore = AssemblyDefinition.ReadAssembly(overwolfCorePath, reader);
@@ -228,14 +228,15 @@ namespace OverwolfInsiderPatcher
                             try
                             {
                                 overwolfCoreGES = InjectMethods.OverwolfCoreGetExtensionSubscriptions(ref overwolfCore, overwolfCoreGES);
-                            } catch(Exception e)
+                            }
+                            catch (Exception e)
                             {
                                 successful = false;
                                 Console.WriteLine("Error, Overwolf.Core will not be patched: ");
                                 Console.WriteLine(e);
                             }
                         }
-                            
+
                         //
                     }
 
@@ -257,7 +258,8 @@ namespace OverwolfInsiderPatcher
                         {
                             overwolfCoreExtensionWebAppStratContentValidation.Body.Instructions.Clear();
                             overwolfCoreExtensionWebAppStratContentValidation.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
-                        } catch (Exception e)
+                        }
+                        catch (Exception e)
                         {
                             successful = false;
                             Console.WriteLine("Error, Overwolf.Core will not be patched: ");
@@ -279,8 +281,8 @@ namespace OverwolfInsiderPatcher
                     if (File.Exists(backupFilePath))
                         File.Delete(backupFilePath);
                     File.Copy(overwolfCorePath, backupFilePath);
-                    if(successful)
-                    overwolfCore.Write(overwolfCorePath);
+                    if (successful)
+                        overwolfCore.Write(overwolfCorePath);
                     Console.WriteLine("|| ------ Patched successfully                                            ||");
                 }
                 catch (System.UnauthorizedAccessException)
@@ -300,25 +302,75 @@ namespace OverwolfInsiderPatcher
 
             if (File.Exists(overwolfBDDllPath))
             {
+                Console.WriteLine();
+                Console.WriteLine();
+                Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
+                Console.WriteLine("||                            OverWolf.Client.BL.dll                      ||");
+                Console.WriteLine("||                                                                        ||");
+                Console.WriteLine("|| OverWolf.Client.BL.ODKv2.Managers.DataManager.ExtensionDataManager type found! ||");
                 var resolver = new DefaultAssemblyResolver();
                 resolver.AddSearchDirectory(Path.GetDirectoryName(overwolfBDDllPath));
                 ReaderParameters reader = new ReaderParameters { AssemblyResolver = resolver, ReadWrite = true, ReadingMode = ReadingMode.Immediate, InMemory = true };
-                AssemblyDefinition overwolfSubscriptions = AssemblyDefinition.ReadAssembly(overwolfBDDllPath, reader);
-                TypeDefinition overwolfSubscriptionsModel = overwolfSubscriptions.MainModule.GetType("OverWolf.Client.BL.ODKv2.Managers.DataManager.ExtensionDataManager");
+                AssemblyDefinition overwolfBD = AssemblyDefinition.ReadAssembly(overwolfBDDllPath, reader);
+                TypeDefinition overwolfExtensionDataManager = overwolfBD.MainModule.GetType("OverWolf.Client.BL.ODKv2.Managers.DataManager.ExtensionDataManager");
 
-                foreach (var m in overwolfSubscriptionsModel.Methods)
+                if (overwolfBD != null)
                 {
-                    if (m.Name == "BlockUnauthorizedExtension" || m.Name == "ValidateExtension" || m.Name == "IsWhiteListForValidation")
+                    MethodDefinition validateExtensionMethod = overwolfExtensionDataManager.Methods.SingleOrDefault(x => x.Name == "ValidateExtension");
+                    MethodDefinition blockUnauthorizedExtensionMethod = overwolfExtensionDataManager.Methods.SingleOrDefault(x => x.Name == "BlockUnauthorizedExtension");
+                    MethodDefinition isWhiteListForValidationMethod = overwolfExtensionDataManager.Methods.SingleOrDefault(x => x.Name == "IsWhiteListForValidation");
+
+                    if (validateExtensionMethod != null)
                     {
-                        m.Body.Instructions.Clear();
-
-                        m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldc_I4_0));
-                        m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
-
+                        Console.WriteLine("|| -- ValidateExtension method found!                                     ||");
+                        InjectMethods.PatchReturn(ref validateExtensionMethod, true);
+                        Console.WriteLine("|| ---- ValidateExtension method patched!                                 ||");
                     }
+                    else
+                        Console.WriteLine("ValidateExtension not found!");
+
+                    if (blockUnauthorizedExtensionMethod != null)
+                    {
+                        Console.WriteLine("|| -- BlockUnauthorizedExtension method found!                            ||");
+                        InjectMethods.PatchReturn(ref blockUnauthorizedExtensionMethod, false);
+                        Console.WriteLine("|| ---- BlockUnauthorizedExtension method patched!                        ||");
+                    }
+                    else
+                        Console.WriteLine("BlockUnauthorizedExtension not found!");
+
+                    if (isWhiteListForValidationMethod != null)
+                    {
+                        Console.WriteLine("|| -- IsWhiteListForValidation method found!                              ||");
+                        InjectMethods.PatchReturn(ref isWhiteListForValidationMethod, true);
+                        Console.WriteLine("|| ---- IsWhiteListForValidation method patched!                          ||");
+                    }
+                    else
+                        Console.WriteLine("IsWhiteListForValidation not found!");
                 }
 
-                overwolfSubscriptions.Write(overwolfBDDllPath);
+                string backupFilePath = Path.GetDirectoryName(overwolfBDDllPath) + "\\" + Path.GetFileNameWithoutExtension(overwolfBDDllPath) + "_bak.dll";
+
+                try
+                {
+                    if (File.Exists(backupFilePath))
+                        File.Delete(backupFilePath);
+                    File.Copy(overwolfBDDllPath, backupFilePath);
+                    overwolfBD.Write(overwolfBDDllPath);
+                    Console.WriteLine("|| ------ Patched successfully                                            ||");
+                }
+                catch (System.UnauthorizedAccessException)
+                {
+                    Console.WriteLine("Permission denied");
+                }
+                catch (Exception e)
+                {
+                    File.Delete(overwolfBDDllPath);
+                    if (File.Exists(backupFilePath))
+                        File.Copy(backupFilePath, overwolfBDDllPath);
+                    Console.WriteLine(e);
+                }
+                resolver.Dispose();
+                Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
             }
 
             if (File.Exists(overwolfSubscriptionsPath))
