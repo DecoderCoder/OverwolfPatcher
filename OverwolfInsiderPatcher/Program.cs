@@ -244,7 +244,35 @@ namespace OverwolfInsiderPatcher
                 {
                     Console.WriteLine("OverWolf.Client.Core.Managers.WindowsInsiderSupportHelper type not found!");
                 }
+
+
+                TypeDefinition overwolfCoreExtensionWebApp = overwolfCore.MainModule.GetType("OverWolf.Client.Core.ODKv2.ExtensionWebApp"); // you think this will already work? i can try yes
+                {
+                    Console.WriteLine("|| OverWolf.Client.Core.ODKv2.ExtensionWebApp type found!    ||");
+                    MethodDefinition overwolfCoreExtensionWebAppStratContentValidation = overwolfCoreExtensionWebApp.Methods.SingleOrDefault(x => x.Name == "StratContentValidation");
+                    if (overwolfCoreExtensionWebAppStratContentValidation != null)
+                    {
+                        Console.WriteLine("|| -- StratContentValidation method found!                             ||");
+                        try
+                        {
+                            overwolfCoreExtensionWebAppStratContentValidation.Body.Instructions.Clear();
+                            overwolfCoreExtensionWebAppStratContentValidation.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+                        } catch (Exception e)
+                        {
+                            successful = false;
+                            Console.WriteLine("Error, Overwolf.Core will not be patched: ");
+                            Console.WriteLine(e);
+                        }
+                    }
+
+                    //
+                }
+
+
                 string backupFilePath = Path.GetDirectoryName(overwolfCorePath) + "\\" + Path.GetFileNameWithoutExtension(overwolfCorePath) + "_bak.dll";
+
+
+
 
                 try
                 {
@@ -280,23 +308,12 @@ namespace OverwolfInsiderPatcher
 
                 foreach (var m in overwolfSubscriptionsModel.Methods)
                 {
-                    if (m.Name == "BlockUnauthorizedExtension")
+                    if (m.Name == "BlockUnauthorizedExtension" || m.Name == "ValidateExtension" || m.Name == "IsWhiteListForValidation")
                     {
                         m.Body.Instructions.Clear();
 
                         m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldc_I4_0));
                         m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
-
-                    }
-
-                    if (m.Name == "ValidateExtensionIntallation")
-                    {
-                        Console.WriteLine("ValidateExtensionIntallation patched auch");
-                        m.Body.Instructions.Clear();
-
-                        m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldc_I4_1));
-                        m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
-
 
                     }
                 }
