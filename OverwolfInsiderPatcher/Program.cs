@@ -74,6 +74,7 @@ namespace OverwolfInsiderPatcher
             string overwolfCoreCUPath = "";
             string overwolfSubscriptionsPath = "";
             string overwolfExtensionsDllPath = ""; // Overwolf.Extensions.dll
+            string overwolfBDDllPath = ""; // Overwolf.Extensions.dll
 
             bool isElevated;
             using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
@@ -135,6 +136,11 @@ namespace OverwolfInsiderPatcher
                 {
                     overwolfSubscriptionsPath = dir + "\\Overwolf.Subscriptions.dll";
                     Console.WriteLine("Overwolf.Subscriptions.dll found!");
+                }             
+                if (File.Exists(dir + "\\OverWolf.Client.BL.dll"))
+                {
+                    overwolfBDDllPath = dir + "\\OverWolf.Client.BL.dll";
+                    Console.WriteLine("OverWolf.Client.BL.dll found!");
                 }
             }
             //Console.Write("Enter \"Overwolf.Client.Core.dll\" path");
@@ -262,6 +268,40 @@ namespace OverwolfInsiderPatcher
                 }
                 resolver.Dispose();
                 Console.WriteLine("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
+            }
+
+            if (File.Exists(overwolfBDDllPath))
+            {
+                var resolver = new DefaultAssemblyResolver();
+                resolver.AddSearchDirectory(Path.GetDirectoryName(overwolfBDDllPath));
+                ReaderParameters reader = new ReaderParameters { AssemblyResolver = resolver, ReadWrite = true, ReadingMode = ReadingMode.Immediate, InMemory = true };
+                AssemblyDefinition overwolfSubscriptions = AssemblyDefinition.ReadAssembly(overwolfBDDllPath, reader);
+                TypeDefinition overwolfSubscriptionsModel = overwolfSubscriptions.MainModule.GetType("OverWolf.Client.BL.ODKv2.Managers.DataManager.ExtensionDataManager");
+
+                foreach (var m in overwolfSubscriptionsModel.Methods)
+                {
+                    if (m.Name == "BlockUnauthorizedExtension")
+                    {
+                        m.Body.Instructions.Clear();
+
+                        m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldc_I4_0));
+                        m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+
+                    }
+
+                    if (m.Name == "ValidateExtensionIntallation")
+                    {
+                        Console.WriteLine("ValidateExtensionIntallation patched auch");
+                        m.Body.Instructions.Clear();
+
+                        m.Body.Instructions.Add(Instruction.Create(OpCodes.Ldc_I4_1));
+                        m.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
+
+
+                    }
+                }
+
+                overwolfSubscriptions.Write(overwolfBDDllPath);
             }
 
             if (File.Exists(overwolfSubscriptionsPath))
