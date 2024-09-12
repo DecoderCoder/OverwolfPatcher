@@ -3,11 +3,12 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.11.35303.130
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OverwolfPatcher", "OverwolfInsiderPatcher\OverwolfPatcher.csproj", "{53370A50-3DC8-45C9-A300-D396D8731DE8}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OverwolfPatcher", "OverwolfPatcher\OverwolfPatcher.csproj", "{53370A50-3DC8-45C9-A300-D396D8731DE8}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{E49308C9-9D22-403D-8E47-1D17F043884B}"
 	ProjectSection(SolutionItems) = preProject
 		.editorconfig = .editorconfig
+		.gitignore = .gitignore
 	EndProjectSection
 EndProject
 Global
