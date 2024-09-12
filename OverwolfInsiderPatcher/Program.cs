@@ -1,9 +1,9 @@
-﻿using Microsoft.Win32;
-using System;
-using System.IO;
-using System.Collections.Generic;
-using Bluscream;
+﻿using Bluscream;
+using Microsoft.Win32;
 using OverwolfPatcher.Classes;
+using System;
+using System.Collections.Generic;
+using System.IO;
 
 namespace OverwolfPatcher
 {
@@ -33,7 +33,8 @@ namespace OverwolfPatcher
                 Console.WriteLine("Overwolf app is running, do you want to close it now? (y/n)");
                 var key = Console.ReadKey();
                 if (key.Key == ConsoleKey.Y) ow.Processes.ForEach(p => p.Kill());
-                else {
+                else
+                {
                     Console.WriteLine("Cannot continue, press any key to exit");
                     Console.ReadKey();
                     Utils.Exit(1);

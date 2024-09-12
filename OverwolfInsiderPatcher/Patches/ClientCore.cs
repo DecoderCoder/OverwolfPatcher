@@ -1,12 +1,11 @@
-﻿using System.IO;
-using System;
-using OverwolfPatcher.Classes;
-using Mono.Cecil.Cil;
+﻿using Bluscream;
 using Mono.Cecil;
-using System.Linq;
-using Bluscream;
+using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
+using OverwolfPatcher.Classes;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace OverwolfPatcher.Patches;
 

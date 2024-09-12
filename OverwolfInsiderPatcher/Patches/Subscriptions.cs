@@ -1,15 +1,15 @@
-﻿using System;
-using OverwolfPatcher.Classes;
+﻿using Bluscream;
 using Mono.Cecil;
-using System.Linq;
-using Bluscream;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
+using OverwolfPatcher.Classes;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace OverwolfPatcher.Patches;
 
-internal class Subscriptions: IPatch
+internal class Subscriptions : IPatch
 {
 
     public string Name => "Subscriptions";

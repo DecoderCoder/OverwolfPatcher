@@ -1,12 +1,12 @@
-﻿using System;
-using OverwolfPatcher.Classes;
+﻿using Bluscream;
 using Mono.Cecil;
+using OverwolfPatcher.Classes;
+using System;
 using System.Linq;
-using Bluscream;
 
 namespace OverwolfPatcher.Patches;
 
-internal class ClientBL: IPatch
+internal class ClientBL : IPatch
 {
 
     public string Name => "Client BL";

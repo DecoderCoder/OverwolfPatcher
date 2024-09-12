@@ -1,15 +1,12 @@
-﻿using System;
-using OverwolfPatcher.Classes;
+﻿using Bluscream;
 using Mono.Cecil;
+using OverwolfPatcher.Classes;
+using System;
 using System.Linq;
-using Bluscream;
-using Mono.Cecil.Cil;
-using System.Collections.Generic;
-using System.IO;
 
 namespace OverwolfPatcher.Patches;
 
-internal class Extensions: IPatch
+internal class Extensions : IPatch
 {
 
     public string Name => "Extensions";
