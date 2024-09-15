@@ -32,10 +32,10 @@
     <Authors>Decode, Bluscream</Authors>
     <Description>Patcher for Overwolf</Description>
     <Copyright>2021-2024</Copyright>
-    <PackageProjectUrl>https://github.com/DecoderCoder/OverwolfInsiderPatcher</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/DecoderCoder/OverwolfPatcher</PackageProjectUrl>
     <PackageIcon>icon.ico</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <RepositoryUrl>https://github.com/DecoderCoder/OverwolfInsiderPatcher</RepositoryUrl>
+    <RepositoryUrl>https://github.com/DecoderCoder/OverwolfPatcher</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <NeutralLanguage>en-US</NeutralLanguage>
     <IncludeSymbols>True</IncludeSymbols>
