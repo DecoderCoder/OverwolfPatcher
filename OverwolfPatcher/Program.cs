@@ -20,7 +20,18 @@ namespace OverwolfPatcher
         static Overwolf ow;
 
 
-        static void Main(string[] args)
+        static int Main(string[] args)
+        {
+            try { return Testing.PremiumCommand.Run(args); }
+            catch (Exception error)
+            {
+                Console.Error.WriteLine("FAILED: " + error.Message);
+                return 1;
+            }
+        }
+
+        // Retained for historical comparison only; never called by the entry point.
+        static void LegacyMain(string[] args)
         {
             Console.Title = $"{AssemblyInfo.Product} by {AssemblyInfo.Company} v{AssemblyInfo.Version}";
 

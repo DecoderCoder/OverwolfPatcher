@@ -2,6 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net48</TargetFramework>
 	<LangVersion>10.0</LangVersion>
+    <Nullable>annotations</Nullable>
     <OutputType>Exe</OutputType>
     <RootNamespace>OverwolfPatcher</RootNamespace>
     <AssemblyName>OverwolfPatcher</AssemblyName>
@@ -44,6 +45,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\OverwolfPatcher.Runtime\OverwolfPatcher.Runtime.csproj" />
     <BootstrapperPackage Include=".NETFramework,Version=v4.8">
       <Visible>False</Visible>
       <ProductName>Microsoft .NET Framework 4.8 %28x86 and x64%29</ProductName>

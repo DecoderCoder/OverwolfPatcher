@@ -1,0 +1,4 @@
+LIBRARY OverwolfPatcher.Profiler.x64.dll
+EXPORTS
+    DllGetClassObject PRIVATE
+    DllCanUnloadNow PRIVATE
