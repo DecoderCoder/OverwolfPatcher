@@ -390,3 +390,39 @@ FodyWeavers.xsd
 
 # Custom Entries
 !OverwolfPatcher.exe
+!build/NuGet.Config
+
+# Local build / diagnostic output
+**/bin/
+**/obj/
+TestResults/
+
+# Native build output
+native/x64/
+native/Debug/
+native/Release/
+native/out/
+
+# Local diagnostics
+*.dmp
+*.bak
+
+# README analysis bundle
+_readme_context/
+readme-context.zip
+
+# NuGet/package restore output
+packages/
+
+# Native build intermediates
+build/native/
+*.obj
+*.lib
+*.exp
+*.pdb
+*.tlog
+*.lastbuildstate
+
+# Local logs and temporary files
+*.log
+*.tmp

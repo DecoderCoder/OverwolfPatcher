@@ -1,6 +1,8 @@
 ﻿using System.Reflection;
 using System.Resources;
 using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
+[assembly: InternalsVisibleTo("OverwolfPatcher.Tests")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 

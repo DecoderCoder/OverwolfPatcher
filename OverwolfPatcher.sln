@@ -5,6 +5,10 @@ VisualStudioVersion = 17.11.35303.130
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OverwolfPatcher", "OverwolfPatcher\OverwolfPatcher.csproj", "{53370A50-3DC8-45C9-A300-D396D8731DE8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OverwolfPatcher.Runtime", "OverwolfPatcher.Runtime\OverwolfPatcher.Runtime.csproj", "{D1F14BD5-3F7B-4C9B-B5C8-1A28C819B9F0}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "OverwolfPatcher.Profiler", "native\OverwolfPatcher.Profiler.vcxproj", "{5C3B4B46-2F2C-4E8A-AE96-CFD7317B0DA1}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{E49308C9-9D22-403D-8E47-1D17F043884B}"
 	ProjectSection(SolutionItems) = preProject
 		.editorconfig = .editorconfig
@@ -21,6 +25,14 @@ Global
 		{53370A50-3DC8-45C9-A300-D396D8731DE8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{53370A50-3DC8-45C9-A300-D396D8731DE8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{53370A50-3DC8-45C9-A300-D396D8731DE8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D1F14BD5-3F7B-4C9B-B5C8-1A28C819B9F0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D1F14BD5-3F7B-4C9B-B5C8-1A28C819B9F0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+	{D1F14BD5-3F7B-4C9B-B5C8-1A28C819B9F0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+	{D1F14BD5-3F7B-4C9B-B5C8-1A28C819B9F0}.Release|Any CPU.Build.0 = Release|Any CPU
+	{5C3B4B46-2F2C-4E8A-AE96-CFD7317B0DA1}.Debug|Any CPU.ActiveCfg = Debug|x64
+	{5C3B4B46-2F2C-4E8A-AE96-CFD7317B0DA1}.Debug|Any CPU.Build.0 = Debug|x64
+	{5C3B4B46-2F2C-4E8A-AE96-CFD7317B0DA1}.Release|Any CPU.ActiveCfg = Release|x64
+	{5C3B4B46-2F2C-4E8A-AE96-CFD7317B0DA1}.Release|Any CPU.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

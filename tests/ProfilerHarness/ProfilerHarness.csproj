@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>10.0</LangVersion>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>OverwolfPatcher.ProfilerHarness</AssemblyName>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ProfilerFixture\ProfilerFixture.csproj" />
+  </ItemGroup>
+</Project>
