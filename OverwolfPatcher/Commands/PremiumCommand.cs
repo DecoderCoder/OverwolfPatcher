@@ -1,4 +1,5 @@
 using System;
+// Command entry point retained in the OverwolfPatcher.Testing namespace for compatibility.
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
