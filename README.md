@@ -1,19 +1,21 @@
 <div align="center">
   <h1>OverwolfPatcher</h1>
-  <p>Version-pinned, in-memory CLR instrumentation for investigating local Outplayed premium feature gates.</p>
-
-  <p>
-    <a href="#getting-started">Getting started</a> •
-    <a href="#how-it-works">How it works</a> •
-    <a href="#validation-status">Validation</a> •
-    <a href="#troubleshooting">Troubleshooting</a>
-  </p>
+  <p>Version-pinned, in-memory CLR instrumentation for investigating local Outplayed premium feature gates.<br><b>You can also read the research on how I built this here: <br>https://www.brunotrigueiro.com/writing/cracking-overwolf-when-modifying-the-binary-stops-working/</b></p>
+  
+  <br>
+  
 
   <p>
     <a href="#validation-status"><img src="https://img.shields.io/badge/status-experimental-orange" alt="Experimental status"/></a>
     <a href="#requirements"><img src="https://img.shields.io/badge/platform-Windows-blue" alt="Windows platform"/></a>
     <a href="#how-it-works"><img src="https://img.shields.io/badge/architecture-x64-blue" alt="x64 architecture"/></a>
     <a href="#requirements"><img src="https://img.shields.io/badge/target-.NET%20Framework%204.8-512BD4" alt=".NET Framework 4.8 target"/></a>
+  </p>
+  <p>
+    <a href="#getting-started">Getting started</a> •
+    <a href="#how-it-works">How it works</a> •
+    <a href="#validation-status">Validation</a> •
+    <a href="#troubleshooting">Troubleshooting</a>
   </p>
 </div>
 
