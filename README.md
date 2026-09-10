@@ -1,6 +1,6 @@
 <div align="center">
   <h1>OverwolfPatcher</h1>
-  <p>Shape-driven, in-memory CLR instrumentation for investigating local Overwolf extension feature gates.<br><b>You can also read the research on how I built this here: <br>https://www.brunotrigueiro.com/writing/cracking-overwolf-when-modifying-the-binary-stops-working/</b></p>
+  <p>Shape-driven, in-memory CLR instrumentation for investigating local Overwolf extension feature gates.<br><b>Read the research behind this collaborative work here:<br>https://www.brunotrigueiro.com/writing/2ff62de4-c03c-49a2-b4d5-cfa4e10b795d/</b></p>
 
   <p>
     <a href="#getting-started">Getting started</a> •
@@ -35,7 +35,14 @@
 > `OverwolfPatcher.exe`; do **not** start Overwolf directly, because a normal
 > Overwolf launch does not inherit the CLR profiler configuration. See
 > [Project stopping point](#project-stopping-point) for everything investigated
-> and the exact remaining boundary.
+> and the exact remaining boundary. It is technically possible for the
+> community to build and maintain a verified UID-to-plan-ID registry for apps
+> whose catalogs are empty. If enough people want broader coverage, that is a
+> viable community effort, provided every mapping records its source and app
+> version instead of guessing. The next engineering step would then be launch
+> integration: make the user's normal Overwolf shortcut/protocol entry point
+> start `OverwolfPatcher.exe`, which in turn starts Overwolf, rather than letting
+> the user accidentally launch the uninstrumented Overwolf executable directly.
 
 > [!WARNING]
 > This is an experimental research tool. It changes managed method bodies in a running process and is not an Overwolf-supported extension. It uses metadata shape checks instead of a version allow-list, so updates can still be incompatible. Do not use it to represent a paid account entitlement.
@@ -107,6 +114,24 @@ a user-provided map, a compiled app allow-list, guessing likely integers,
 extracting constants from each extension, or obtaining private developer
 metadata. Work stopped rather than shipping one of those as automatic plan
 resolution.
+
+### Possible community continuation
+
+A complete community-maintained mapping is technically possible even though a
+complete automatic resolver is not. Contributors could verify an extension's
+plan ID, associate it with the extension UID and tested version, and submit that
+evidence to a reviewed registry. Enough contributions could eventually cover
+most premium extensions. Such a registry would be a deliberate community data
+project—not an authoritative value inferred by the patcher—and should reject
+unverified or ambiguous entries.
+
+After that mapping effort, the practical next feature should be a safe launcher
+integration. Overwolf must inherit the profiler environment from this program,
+so opening `Overwolf.exe` directly bypasses the patch. A future implementation
+could install an opt-in shortcut or protocol/launcher handoff that points to
+`OverwolfPatcher.exe`; the patcher would resolve the plans, configure the CLR
+profiler, and then start Overwolf. It should preserve an obvious way to launch
+Overwolf normally and avoid modifying the signed Overwolf binaries themselves.
 
 ## What changed from the previous approach
 
