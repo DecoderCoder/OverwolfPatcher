@@ -3,6 +3,7 @@
   <p>Shape-driven, in-memory CLR instrumentation for investigating local Overwolf extension feature gates.<br><b>Read the research behind this collaborative work here:<br>https://www.brunotrigueiro.com/writing/2ff62de4-c03c-49a2-b4d5-cfa4e10b795d/</b></p>
 
   <p>
+    <a href="#project-stopping-point">Project status</a> •
     <a href="#getting-started">Getting started</a> •
     <a href="#how-it-works">How it works</a> •
     <a href="#validation-status">Validation</a> •
@@ -14,12 +15,6 @@
     <a href="#requirements"><img src="https://img.shields.io/badge/platform-Windows-blue" alt="Windows platform"/></a>
     <a href="#how-it-works"><img src="https://img.shields.io/badge/architecture-x64-blue" alt="x64 architecture"/></a>
     <a href="#requirements"><img src="https://img.shields.io/badge/target-.NET%20Framework%204.8-512BD4" alt=".NET Framework 4.8 target"/></a>
-  </p>
-  <p>
-    <a href="#getting-started">Getting started</a> •
-    <a href="#how-it-works">How it works</a> •
-    <a href="#validation-status">Validation</a> •
-    <a href="#troubleshooting">Troubleshooting</a>
   </p>
 </div>
 
@@ -77,6 +72,16 @@ used by the installed Overwolf Appstore:
 ```text
 https://console-api.overwolf.com/v2/subscription-plans/app/<extension-id>
 ```
+
+Overwolf's
+[subscription-plan documentation](https://dev.overwolf.com/ow-native/developers-console/monetize/subs/subscription-plans/)
+describes the plan ID assigned in the developer console. The
+[profile subscriptions API](https://dev.overwolf.com/ow-native/reference/profile/subscriptions/)
+returns active plans for the calling extension UID. Neither API derives a plan
+ID from the UID. The current
+[App Subscriptions API](https://dev.overwolf.com/ow-native/reference/subscriptions-api/)
+uses Tebex `packageId` values under a separate store ID, so its values cannot be
+used as legacy `planId` values.
 
 When the endpoint returns numeric `id` records, the launcher creates a separate
 UID-to-plan set for each extension and the native profiler injects the matching
@@ -230,43 +235,6 @@ The current implementation keeps the installed Core file byte-for-byte unchanged
 - Original IL, locals, branches, exception regions, and method metadata are retained where required by the adapter.
 - Inlining and NGEN are disabled process-wide for instrumented launches so the replacement can be observed before JIT compilation.
 - x64 fixture and offline tests for both target methods.
-
-## TODO
-
-- [x] Replace the provisional shared `--plans` list with per-extension plan
-  resolution. Legacy numeric plan IDs are Overwolf subscription-catalog record
-  IDs allocated for an app UID; they are not derived from the UID and are not
-  universal. The launcher queries the legacy catalog per installed extension,
-  emits returned IDs only inside that extension's UID guard, and leaves
-  extensions with no discoverable legacy IDs unchanged.
-
-## Plan resolution findings
-
-For the legacy profile API, a developer creates plans in Overwolf's catalog and
-Overwolf assigns each plan a numeric record ID under the app UID. The
-[subscription-plan documentation](https://dev.overwolf.com/ow-native/developers-console/monetize/subs/subscription-plans/)
-describes that developer-console plan ID. The
-[official profile subscriptions API](https://dev.overwolf.com/ow-native/reference/profile/subscriptions/)
-documents that active subscriptions are scoped to the calling extension UID.
-The UID, manifest permissions, Core metadata, and local settings do not encode
-the configured plan ID. The newer
-[App Subscriptions API](https://dev.overwolf.com/ow-native/reference/subscriptions-api/)
-returns Tebex `packageId` values and is a different contract; those values are
-not substituted for legacy `planId` values.
-
-For `--all-extensions`, the launcher queries
-`https://console-api.overwolf.com/v2/subscription-plans/app/<extension-id>`
-per extension, based on the legacy catalog URL observed in the installed
-Overwolf Appstore. It accepts only the Appstore's numeric `id` record shape,
-then passes the result to native code as
-`extension-id=plan1,plan2;other-extension-id=plan3`; native IL builds one
-premium result per mapping. A catalog response with no plans, a failed lookup,
-or an app that uses a separate backend is intentionally not guessed or patched.
-There is no CLI plan override, shared fallback list, extension mapping, bundle
-scan, or deobfuscation path. Consequently, an extension is supported by this
-automatic patch only when its UID has valid legacy catalog metadata. This
-fail-closed boundary prevents a plausible-looking but incorrect plan from being
-injected.
 
 ## How it works
 
