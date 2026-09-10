@@ -125,6 +125,78 @@ most premium extensions. Such a registry would be a deliberate community data
 project—not an authoritative value inferred by the patcher—and should reject
 unverified or ambiguous entries.
 
+#### How plans 61 and 63 were identified
+
+Record the extension version and bundle hash before inspecting a candidate.
+Offsets and minified line numbers change whenever an app updates. These were the
+files used in this investigation:
+
+| App | Installed bundle | SHA-256 |
+| --- | --- | --- |
+| Outplayed `175.3.12981` | `cghphpbjeabdkomiphingnegihoigeggcfphdofo\175.3.12981\background.js` | `BD77D930EC6FEEAF6619B5AFCC63E4D74DE74425F7444F90BFD6DE11F0658666` |
+| Porofessor `2.16.17` | `pibhbkkgefgheeglaeemkkfjlhidhcedalapdggh\2.16.17\dist\porofessor-app.js` | `885BC7DE112C84A042D6B7D13E8197E48356588239F58BC1415A0EB0BB3BBE26` |
+
+Start by finding the Overwolf subscription calls and the values used when their
+results are checked:
+
+```powershell
+$extRoot = Join-Path $env:LOCALAPPDATA 'Overwolf\Extensions'
+$outplayed = Join-Path $extRoot 'cghphpbjeabdkomiphingnegihoigeggcfphdofo\175.3.12981\background.js'
+$porofessor = Join-Path $extRoot 'pibhbkkgefgheeglaeemkkfjlhidhcedalapdggh\2.16.17\dist\porofessor-app.js'
+
+rg -n -S 'getActivePlans|getDetailedActivePlans|planId|subscriptionPlanId' $outplayed
+rg -n -S 'getActivePlans|getDetailedActivePlans|kPremiumPlanId|planId' $porofessor
+```
+
+Outplayed's bundle is readable enough to follow directly. Around lines
+69114–69115 it assigns `subscriptionPlanId = 61` beside the wrapper for
+`overwolf.profile.subscriptions.getDetailedActivePlans`. The following code maps
+the returned `planId` fields and checks whether they contain
+`subscriptionPlanId`. Its subscription-change handler performs the same check.
+That chain establishes `61` as the legacy plan used by the premium predicate.
+
+Porofessor's bundle is a single obfuscated line, so searches can print several
+megabytes of output. Read bounded sections around each match instead:
+
+```powershell
+$text = [IO.File]::ReadAllText($porofessor)
+
+foreach ($needle in @(
+  'getDetailedActivePlans',
+  '_0x1d9b42[_0x3a3eac(0xd61)]=0x3f',
+  '_0x5d97af[_0x26bf15(0x2732)][_0x26bf15(0x218a)]()'
+)) {
+  $position = $text.IndexOf($needle, [StringComparison]::Ordinal)
+  "needle=$needle offset=$position"
+  if ($position -ge 0) {
+    $start = [Math]::Max(0, $position - 250)
+    $text.Substring($start, [Math]::Min(900, $text.Length - $start))
+  }
+}
+```
+
+For that exact Porofessor hash, evaluating only its string-table decoder and
+rotation setup in an isolated JavaScript VM resolves the relevant keys:
+
+```text
+_0x3a3eac(0xd61) = kPremiumPlanId
+_0x3a3eac(0x218a) = getDetailedActivePlans
+_0x3a3eac(0x427) = subscriptions
+_0x3a3eac(0x9ca) = plans
+_0x3a3eac(0x1df6) = planId
+```
+
+The assignment is therefore `kPremiumPlanId = 0x3f`, which is decimal `63`.
+The premium service calls `getDetailedActivePlans()`, reads its `plans` array,
+and searches for a record whose `planId` equals that constant.
+
+A number is suitable for a community mapping only when this whole relationship
+can be demonstrated in the same app version: a premium-plan constant, its use
+in the premium decision, and a comparison against `planId` values returned by
+the Overwolf profile subscription API. Decimal matches elsewhere in a bundle,
+patched logs containing `Local premium test`, cached premium booleans, and IDs
+chosen because they are near a known value are not evidence.
+
 After that mapping effort, the practical next feature should be a safe launcher
 integration. Overwolf must inherit the profiler environment from this program,
 so opening `Overwolf.exe` directly bypasses the patch. A future implementation
