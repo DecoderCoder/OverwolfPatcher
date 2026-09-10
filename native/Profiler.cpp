@@ -49,6 +49,14 @@ namespace
         return value;
     }
 
+    std::wstring Trim(std::wstring value)
+    {
+        const auto isSpace = [](wchar_t character) { return character == L' ' || character == L'\t'; };
+        while (!value.empty() && isSpace(value.front())) value.erase(value.begin());
+        while (!value.empty() && isSpace(value.back())) value.pop_back();
+        return value;
+    }
+
     std::wstring BaseName(const std::wstring &path)
     {
         const size_t slash = path.find_last_of(L"\\/");
@@ -323,25 +331,32 @@ namespace
         void Ret() { U8(0x2A); }
     };
 
-    bool BuildBody(const std::vector<BYTE> &original, bool detailed, const std::vector<mdString> &appStrings,
+    struct PremiumEntry
+    {
+        std::wstring extensionId;
+        mdString appString = 0;
+        std::vector<int> plans;
+    };
+
+    bool BuildBody(const std::vector<BYTE> &original, bool detailed, const std::vector<PremiumEntry> &entries,
         mdToken uidGetter, mdToken stringEquality, mdToken planType,
         mdToken intType, mdString titleString, mdString descriptionString,
-        const std::vector<int> &plans, const mdToken *planTokens, LONGLONG expiry,
+        const mdToken *planTokens, LONGLONG expiry,
         std::vector<BYTE> &replacement)
     {
         MethodBody parsed;
         if (!ParseMethodBody(original, parsed)) return false;
         const BYTE *originalCode = original.data() + parsed.codeOffset;
 
-        if (appStrings.empty()) return false;
+        if (entries.empty()) return false;
 
         Bytecode prefix;
         std::vector<size_t> premiumBranchOperands;
-        for (mdString appString : appStrings)
+        for (const PremiumEntry &entry : entries)
         {
             prefix.U8(0x02); // ldarg.0
             prefix.Call(uidGetter);
-            prefix.Ldstr(appString);
+            prefix.Ldstr(entry.appString);
             prefix.Call(stringEquality);
             prefix.U8(0x3A); // brtrue (long form) to the local-plan body
             premiumBranchOperands.push_back(prefix.data.size());
@@ -350,48 +365,52 @@ namespace
         prefix.U8(0x38); // br (long form) to the original body
         const size_t originalBranchOperand = prefix.data.size();
         prefix.U32(0);
-        const size_t premiumEntry = prefix.data.size();
 
-        prefix.LdcI4(static_cast<int>(plans.size()));
-        if (detailed) prefix.Newarr(planType);
-        else prefix.Newarr(intType);
-
-        for (size_t i = 0; i < plans.size(); ++i)
+        std::vector<size_t> premiumEntries;
+        for (const PremiumEntry &entry : entries)
         {
-            prefix.Dup();
-            prefix.LdcI4(static_cast<int>(i));
-            if (detailed)
+            premiumEntries.push_back(prefix.data.size());
+            prefix.LdcI4(static_cast<int>(entry.plans.size()));
+            if (detailed) prefix.Newarr(planType);
+            else prefix.Newarr(intType);
+
+            for (size_t i = 0; i < entry.plans.size(); ++i)
             {
-                prefix.Newobj(planTokens[0]);
-                const mdToken setters[] = {
-                    planTokens[1], planTokens[2], planTokens[3], planTokens[4],
-                    planTokens[5], planTokens[6], planTokens[7]
-                };
-                prefix.Dup(); prefix.LdcI4(plans[i]); prefix.Callvirt(setters[0]);
-                prefix.Dup(); prefix.LdcI4(3); prefix.Callvirt(setters[1]);
                 prefix.Dup();
-                prefix.U8(0x21); // ldc.i8
-                prefix.U64(static_cast<ULONGLONG>(expiry));
-                prefix.Callvirt(setters[2]);
-                prefix.Dup(); prefix.Ldstr(titleString); prefix.Callvirt(setters[3]);
-                prefix.Dup(); prefix.Ldstr(descriptionString); prefix.Callvirt(setters[4]);
-                prefix.Dup();
-                prefix.U8(0x23); // ldc.r8
-                double price = 0.0;
-                ULONGLONG priceBits = 0;
-                std::memcpy(&priceBits, &price, sizeof(priceBits));
-                prefix.U64(priceBits);
-                prefix.Callvirt(setters[5]);
-                prefix.Dup(); prefix.LdcI4(1); prefix.Callvirt(setters[6]);
-                prefix.U8(0xA2); // stelem.ref
+                prefix.LdcI4(static_cast<int>(i));
+                if (detailed)
+                {
+                    prefix.Newobj(planTokens[0]);
+                    const mdToken setters[] = {
+                        planTokens[1], planTokens[2], planTokens[3], planTokens[4],
+                        planTokens[5], planTokens[6], planTokens[7]
+                    };
+                    prefix.Dup(); prefix.LdcI4(entry.plans[i]); prefix.Callvirt(setters[0]);
+                    prefix.Dup(); prefix.LdcI4(3); prefix.Callvirt(setters[1]);
+                    prefix.Dup();
+                    prefix.U8(0x21); // ldc.i8
+                    prefix.U64(static_cast<ULONGLONG>(expiry));
+                    prefix.Callvirt(setters[2]);
+                    prefix.Dup(); prefix.Ldstr(titleString); prefix.Callvirt(setters[3]);
+                    prefix.Dup(); prefix.Ldstr(descriptionString); prefix.Callvirt(setters[4]);
+                    prefix.Dup();
+                    prefix.U8(0x23); // ldc.r8
+                    double price = 0.0;
+                    ULONGLONG priceBits = 0;
+                    std::memcpy(&priceBits, &price, sizeof(priceBits));
+                    prefix.U64(priceBits);
+                    prefix.Callvirt(setters[5]);
+                    prefix.Dup(); prefix.LdcI4(1); prefix.Callvirt(setters[6]);
+                    prefix.U8(0xA2); // stelem.ref
+                }
+                else
+                {
+                    prefix.LdcI4(entry.plans[i]);
+                    prefix.U8(0x9E); // stelem.i4
+                }
             }
-            else
-            {
-                prefix.LdcI4(plans[i]);
-                prefix.U8(0x9E); // stelem.i4
-            }
+            prefix.Ret();
         }
-        prefix.Ret();
         const size_t originalEntry = prefix.data.size();
         const int64_t originalDisplacement = static_cast<int64_t>(originalEntry) -
             static_cast<int64_t>(originalBranchOperand + 4);
@@ -399,16 +418,15 @@ namespace
             originalDisplacement > (std::numeric_limits<LONG>::max)()) return false;
         const ULONG originalRelative = static_cast<ULONG>(static_cast<LONG>(originalDisplacement));
 
-        const int64_t premiumDisplacement = static_cast<int64_t>(premiumEntry);
-        for (size_t branchOperand : premiumBranchOperands)
+        for (size_t entryIndex = 0; entryIndex < premiumBranchOperands.size(); ++entryIndex)
         {
-            const int64_t displacement = premiumDisplacement -
-                static_cast<int64_t>(branchOperand + 4);
+            const int64_t displacement = static_cast<int64_t>(premiumEntries[entryIndex]) -
+                static_cast<int64_t>(premiumBranchOperands[entryIndex] + 4);
             if (displacement < (std::numeric_limits<LONG>::min)() ||
                 displacement > (std::numeric_limits<LONG>::max)()) return false;
             const ULONG relative = static_cast<ULONG>(static_cast<LONG>(displacement));
-            for (size_t i = 0; i < 4; ++i)
-                prefix.data[branchOperand + i] = static_cast<BYTE>(relative >> (8 * i));
+            for (size_t byteIndex = 0; byteIndex < 4; ++byteIndex)
+                prefix.data[premiumBranchOperands[entryIndex] + byteIndex] = static_cast<BYTE>(relative >> (8 * byteIndex));
         }
         for (size_t i = 0; i < 4; ++i)
             prefix.data[originalBranchOperand + i] = static_cast<BYTE>(originalRelative >> (8 * i));
@@ -830,8 +848,7 @@ namespace
         std::map<ModuleID, ModuleState> moduleStates_;
         CRITICAL_SECTION lock_{};
         std::wstring mode_;
-        std::vector<int> plans_;
-        std::vector<std::wstring> appIds_;
+        std::vector<PremiumEntry> premiumEntries_;
         bool testMode_ = false;
         bool active_ = false;
         bool instrument_ = false;
@@ -866,7 +883,9 @@ namespace
             const wchar_t *names[] = {
                 L"COR_ENABLE_PROFILING", L"COR_PROFILER", L"COR_PROFILER_PATH",
                 L"COR_PROFILER_PATH_32", L"COR_PROFILER_PATH_64",
-                L"COMPLUS_ProfAPI_ProfilerCompatibilitySetting"
+                L"COMPLUS_ProfAPI_ProfilerCompatibilitySetting",
+                L"OVERWOLF_PATCHER_APP", L"OVERWOLF_PATCHER_APPS",
+                L"OVERWOLF_PATCHER_PLANS", L"OVERWOLF_PATCHER_PREMIUM_MAP"
             };
             for (const wchar_t *name : names) SetEnvironmentVariableW(name, nullptr);
         }
@@ -885,21 +904,53 @@ namespace
             return true;
         }
 
-        bool ParseExtensionIds(const std::wstring &text)
+        bool ParsePlanList(const std::wstring &text, std::vector<int> &plans)
         {
             size_t start = 0;
-            while (start < text.size())
+            while (start <= text.size())
             {
                 size_t end = text.find(L',', start);
                 if (end == std::wstring::npos) end = text.size();
-                const std::wstring item = Lower(text.substr(start, end - start));
-                if (!IsExtensionId(item) ||
-                    std::find(appIds_.begin(), appIds_.end(), item) != appIds_.end())
-                    return false;
-                appIds_.push_back(item);
+                const std::wstring item = Trim(text.substr(start, end - start));
+                if (item.empty()) return false;
+                wchar_t *stop = nullptr;
+                long value = wcstol(item.c_str(), &stop, 10);
+                if (stop == nullptr || *stop != L'\0' || value <= 0 || value > 0x7FFFFFFF) return false;
+                if (std::find(plans.begin(), plans.end(), static_cast<int>(value)) == plans.end())
+                    plans.push_back(static_cast<int>(value));
+                if (plans.size() > 32) return false;
+                if (end == text.size()) break;
                 start = end + 1;
             }
-            return !appIds_.empty() && appIds_.size() <= 256;
+            return !plans.empty();
+        }
+
+        bool ParsePremiumMap(const std::wstring &text)
+        {
+            premiumEntries_.clear();
+            if (text.empty()) return false;
+            size_t start = 0;
+            while (start <= text.size())
+            {
+                size_t end = text.find(L';', start);
+                if (end == std::wstring::npos) end = text.size();
+                const std::wstring item = Trim(text.substr(start, end - start));
+                const size_t separator = item.find(L'=');
+                if (item.empty() || separator == std::wstring::npos || separator == 0 ||
+                    separator != item.rfind(L'=')) return false;
+                const std::wstring id = Lower(Trim(item.substr(0, separator)));
+                if (!IsExtensionId(id) || std::find_if(premiumEntries_.begin(), premiumEntries_.end(),
+                    [&](const PremiumEntry &entry) { return entry.extensionId == id; }) != premiumEntries_.end())
+                    return false;
+                PremiumEntry entry;
+                entry.extensionId = id;
+                if (!ParsePlanList(item.substr(separator + 1), entry.plans)) return false;
+                premiumEntries_.push_back(entry);
+                if (premiumEntries_.size() > 256) return false;
+                if (end == text.size()) break;
+                start = end + 1;
+            }
+            return !premiumEntries_.empty();
         }
 
         void LogProcessIdentity(const wchar_t *phase)
@@ -930,27 +981,7 @@ namespace
             logJitDetails_ = Lower(Env(L"OVERWOLF_PATCHER_PROFILER_VERBOSE")) == L"1" ||
                 mode_ == L"observe" || mode_ == L"flags";
             if (mode_ != L"premium") return true;
-            const std::wstring appList = Env(L"OVERWOLF_PATCHER_APPS");
-            if (!appList.empty())
-            {
-                if (!ParseExtensionIds(appList)) return false;
-            }
-            else if (!ParseExtensionIds(Env(L"OVERWOLF_PATCHER_APP")))
-                return false;
-            const std::wstring planText = Env(L"OVERWOLF_PATCHER_PLANS");
-            size_t start = 0;
-            while (start < planText.size())
-            {
-                size_t end = planText.find(L',', start);
-                if (end == std::wstring::npos) end = planText.size();
-                const std::wstring item = planText.substr(start, end - start);
-                wchar_t *stop = nullptr;
-                long value = wcstol(item.c_str(), &stop, 10);
-                if (stop == nullptr || *stop != L'\0' || value <= 0 || value > 0x7FFFFFFF) return false;
-                if (std::find(plans_.begin(), plans_.end(), static_cast<int>(value)) == plans_.end()) plans_.push_back(static_cast<int>(value));
-                start = end + 1;
-            }
-            return !plans_.empty() && plans_.size() <= 32;
+            return ParsePremiumMap(Env(L"OVERWOLF_PATCHER_PREMIUM_MAP"));
         }
 
         bool ValidateModuleShape(const std::wstring &path, IMetaDataImport *import)
@@ -979,9 +1010,18 @@ namespace
             Log(L"Core module observed trigger=" + HexValue(triggerToken) + L": " + path);
             if (mode_ == L"premium")
             {
-                for (size_t i = 0; i < appIds_.size(); ++i)
+                for (size_t i = 0; i < premiumEntries_.size(); ++i)
                     Log(L"premium extension attempt [" + std::to_wstring(i + 1) + L"/" +
-                        std::to_wstring(appIds_.size()) + L"] id=" + appIds_[i]);
+                        std::to_wstring(premiumEntries_.size()) + L"] id=" + premiumEntries_[i].extensionId +
+                        L" plans=" + [&]() {
+                            std::wstring value;
+                            for (size_t p = 0; p < premiumEntries_[i].plans.size(); ++p)
+                            {
+                                if (p != 0) value += L",";
+                                value += std::to_wstring(premiumEntries_[i].plans[p]);
+                            }
+                            return value;
+                        }());
             }
 
             IUnknown *metadataUnknown = nullptr;
@@ -1041,11 +1081,12 @@ namespace
                     import->Release();
                     return;
                 }
-                std::vector<mdString> appStrings;
-                for (const std::wstring &appId : appIds_)
+                std::vector<PremiumEntry> entries = premiumEntries_;
+                for (PremiumEntry &entry : entries)
                 {
                     mdString appString = 0;
-                    hr = emit->DefineUserString(appId.c_str(), static_cast<ULONG>(appId.size()), &appString);
+                    hr = emit->DefineUserString(entry.extensionId.c_str(),
+                        static_cast<ULONG>(entry.extensionId.size()), &appString);
                     if (FAILED(hr) || appString == 0)
                     {
                         Log(L"DefineUserString failed: " + HResult(hr));
@@ -1053,7 +1094,7 @@ namespace
                         import->Release();
                         return;
                     }
-                    appStrings.push_back(appString);
+                    entry.appString = appString;
                 }
                 if (tokens.intType == 0)
                 {
@@ -1082,12 +1123,12 @@ namespace
                 const LONGLONG expiry = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::system_clock::now().time_since_epoch()).count() +
                     7LL * 24LL * 60LL * 60LL * 1000LL;
-                const bool detailedBuilt = BuildBody(detailedOriginal, true, appStrings,
+                const bool detailedBuilt = BuildBody(detailedOriginal, true, entries,
                     tokens.uidGetter, tokens.stringEquality, tokens.planType, tokens.intType,
-                    title, description, plans_, tokens.plan, expiry, detailedReplacement);
-                const bool idsBuilt = BuildBody(idsOriginal, false, appStrings,
+                    title, description, tokens.plan, expiry, detailedReplacement);
+                const bool idsBuilt = BuildBody(idsOriginal, false, entries,
                     tokens.uidGetter, tokens.stringEquality, tokens.planType, tokens.intType,
-                    title, description, plans_, tokens.plan, expiry, idsReplacement);
+                    title, description, tokens.plan, expiry, idsReplacement);
                 if (!detailedBuilt || !idsBuilt)
                 {
                     Log(L"premium IL preflight failed; no target body was activated");
@@ -1183,7 +1224,7 @@ namespace
             const HRESULT getHr = info_->GetEventMask(&effectiveMask);
             active_ = SUCCEEDED(setHr);
             Log(std::wstring(L"profiler initialized mode=") + mode_ +
-                L" apps=" + std::to_wstring(appIds_.size()) +
+                L" premiumEntries=" + std::to_wstring(premiumEntries_.size()) +
                 L" requestedMask=" + HexValue(requestedMask_) +
                 L" setEventMask=" + HResult(setHr) +
                 L" getEventMask=" + HResult(getHr) +

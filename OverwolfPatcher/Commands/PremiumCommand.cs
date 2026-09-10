@@ -18,10 +18,6 @@ namespace OverwolfPatcher.Testing
 {
     internal static class PremiumCommand
     {
-        const string Outplayed = "cghphpbjeabdkomiphingnegihoigeggcfphdofo";
-        const string Porofessor = "pibhbkkgefgheeglaeemkkfjlhidhcedalapdggh";
-        const string OutplayedPlan = "61";
-        const string AllExtensionPlans = "61,63";
         const string ProfilerClsid = "{4D7C38E9-7C8A-4F5D-9D2C-1D3E7BC9F1A4}";
         internal static int Run(string[] args)
         {
@@ -30,13 +26,13 @@ namespace OverwolfPatcher.Testing
             if (command == "--help" || command == "help")
             {
                 Console.WriteLine("OverwolfPatcher status|stage|apply|restore|baseline|instrument [--install DIR] [--output DIR] [--backup DIR]");
-                Console.WriteLine("No arguments launches instrument --mode premium --all-extensions with known local plans 61,63.");
-                Console.WriteLine("stage/apply default to Outplayed plan 61. Other apps: --app EXTENSION_ID --plans 1,2");
+                Console.WriteLine("No arguments launches instrument --mode premium --all-extensions with catalog-resolved per-extension plans.");
+                Console.WriteLine("The legacy on-disk status/stage/apply commands require --app EXTENSION_ID --plans 1,2.");
                 Console.WriteLine("status is read-only. stage writes a copy. apply/restore require Overwolf to be closed.");
                 Console.WriteLine("baseline launches OverwolfLauncher.exe without profiling; use --entry managed to reproduce direct Overwolf.exe.");
                 Console.WriteLine("instrument launches OverwolfLauncher.exe so profiling reaches only its managed Overwolf.exe child; --mode bootstrap|observe|flags|neutral|premium (default neutral).");
                 Console.WriteLine("instrument options: --mode MODE --profiler PROFILER_X64_DLL --log LOG_FILE --wait-ms N [--verbose]");
-                Console.WriteLine("instrument premium options: --app EXTENSION_ID or --all-extensions [--data DIR], plus --plans 1,2");
+                Console.WriteLine("instrument premium options: --app EXTENSION_ID or --all-extensions [--data DIR]. Plan IDs are resolved automatically.");
                 Console.WriteLine("Local legacy subscription API testing only; login is required. No server subscription is granted.");
                 return 0;
             }
@@ -62,6 +58,8 @@ namespace OverwolfPatcher.Testing
                 options.Add(args[i], args[i + 1]);
                 i++;
             }
+            if (command == "instrument" && options.ContainsKey("--plans"))
+                throw new ArgumentException("--plans is not accepted by in-memory instrumentation; premium plan IDs are resolved automatically from Overwolf's per-extension catalog.");
             var install = Path.GetFullPath(Get(options, "--install", DiscoverInstall()));
             var version = ActiveVersion(install);
             var target = Path.Combine(install, version, PremiumAssembly.FileName);
@@ -76,11 +74,12 @@ namespace OverwolfPatcher.Testing
             var allExtensions = options.ContainsKey("--all-extensions");
             if (allExtensions && command != "instrument")
                 throw new ArgumentException("--all-extensions is supported only with instrument --mode premium.");
-            var app = Get(options, "--app", Outplayed);
+            var app = Get(options, "--app", null)
+                ?? throw new ArgumentException(command + " requires --app EXTENSION_ID.");
             if (allExtensions && options.ContainsKey("--app"))
                 throw new ArgumentException("Use either --app or --all-extensions, not both.");
             if (app.Length != 40 || app.Any(c => c < 'a' || c > 'p')) throw new ArgumentException("Expected a 40-character Overwolf extension ID.");
-            var planText = Get(options, "--plans", app == Outplayed ? OutplayedPlan : null)
+            var planText = Get(options, "--plans", null)
                 ?? throw new ArgumentException("Specify --plans for this app.");
             var plans = planText.Split(',').Select(int.Parse).Distinct().ToArray();
             if (plans.Length == 0 || plans.Length > 32 || plans.Any(p => p <= 0)) throw new ArgumentException("Specify 1 to 32 positive plan IDs.");
@@ -237,27 +236,40 @@ namespace OverwolfPatcher.Testing
             if (mode != "bootstrap" && mode != "observe" && mode != "flags" && mode != "neutral" && mode != "premium")
                 throw new ArgumentException("--mode must be bootstrap, observe, flags, neutral, or premium.");
 
-            var allExtensions = options.ContainsKey("--all-extensions");
+            var selectedApp = Get(options, "--app", null);
+            var allExtensions = options.ContainsKey("--all-extensions") ||
+                (mode == "premium" && selectedApp == null);
             var verbose = options.ContainsKey("--verbose") || allExtensions;
             if (allExtensions && mode != "premium")
                 throw new ArgumentException("--all-extensions requires --mode premium.");
             if (allExtensions && options.ContainsKey("--app"))
                 throw new ArgumentException("Use either --app or --all-extensions, not both.");
 
-            var app = Get(options, "--app", Outplayed);
-            if (app.Length != 40 || app.Any(c => c < 'a' || c > 'p')) throw new ArgumentException("Expected a 40-character Overwolf extension ID.");
-            var apps = allExtensions ? DiscoverInstalledExtensionIds(options) : new[] { app };
-            if (apps.Length == 0)
+            if (selectedApp != null && (selectedApp.Length != 40 || selectedApp.Any(c => c < 'a' || c > 'p')))
+                throw new ArgumentException("Expected a 40-character Overwolf extension ID.");
+            var apps = mode != "premium"
+                ? new string[0]
+                : allExtensions ? DiscoverInstalledExtensionIds(options) : new[] { selectedApp };
+            if (mode == "premium" && apps.Length == 0)
                 throw new IOException("No installed Overwolf extensions were found.");
             if (apps.Length > 256)
                 throw new ArgumentException("At most 256 installed extensions can be selected for one instrumented session.");
-            var defaultPlans = allExtensions ? AllExtensionPlans : (app == Outplayed ? OutplayedPlan : null);
-            var planText = Get(options, "--plans", defaultPlans);
-            if (mode == "premium" && planText == null) throw new ArgumentException("Specify --plans for this app in premium mode.");
-            var plans = mode == "premium"
-                ? planText.Split(',').Select(int.Parse).Distinct().ToArray()
-                : new int[0];
-            if (plans.Length > 32 || plans.Any(p => p <= 0)) throw new ArgumentException("Specify 1 to 32 positive plan IDs.");
+            ExtensionPlanResolution planResolution = null;
+            if (mode == "premium")
+            {
+                planResolution = allExtensions
+                    ? ExtensionPlanResolver.ResolveAll(apps)
+                    : new ExtensionPlanResolution(new[] {
+                        ExtensionPlanResolver.ResolveSingle(selectedApp)
+                    }, new ExtensionPlanSkip[0]);
+                if (planResolution.Selections.Length == 0)
+                {
+                    var details = string.Join(Environment.NewLine, planResolution.Skipped.Select(skip =>
+                        "  " + skip.ExtensionId + ": " + skip.Reason));
+                    throw new ArgumentException("No installed extension had authoritative legacy plan metadata, so no premium patch was applied. Unsupported extensions were left unchanged." +
+                        (string.IsNullOrWhiteSpace(details) ? string.Empty : Environment.NewLine + details));
+                }
+            }
             var waitText = Get(options, "--wait-ms", "0");
             if (!int.TryParse(waitText, out var waitMs) || waitMs < 0 || waitMs > 60000)
                 throw new ArgumentException("--wait-ms must be between 0 and 60000.");
@@ -274,18 +286,36 @@ namespace OverwolfPatcher.Testing
                 PrintKeyValue("Overwolf version", version);
                 PrintKeyValue("Target binary", target);
                 PrintKeyValue("Profiler", profiler);
-                PrintKeyValue("Plans", plans.Length == 0 ? "original methods" : string.Join(",", plans));
-                PrintKeyValue("Patch scope", allExtensions ? "all installed extensions" : "selected extension");
+                PrintKeyValue("Plan mapping", mode == "premium"
+                    ? string.Join(";", planResolution.Selections.Select(selection => selection.ExtensionId + "=" + string.Join(",", selection.Plans)))
+                    : "original methods");
+                PrintKeyValue("Patch scope", mode != "premium" ? "metadata-identified Core methods" :
+                    allExtensions ? "catalog-supported installed extensions" : "selected extension");
                 PrintStatus("OK", "Overwolf processes are stopped and launcher/Core path checks passed.", ConsoleColor.Green);
 
                 PrintSection("EXTENSION PATCH ATTEMPTS");
                 for (var index = 0; index < apps.Length; index++)
                 {
-                    var planDescription = plans.Length == 0 ? "original methods" : "local plans " + string.Join(",", plans);
-                    PrintStatus("TRY", string.Format("[{0:00}/{1:00}] {2} -> {3}", index + 1, apps.Length, apps[index], planDescription), ConsoleColor.Cyan);
+                    var selection = mode == "premium"
+                        ? planResolution.Selections.SingleOrDefault(candidate => candidate.ExtensionId == apps[index])
+                        : null;
+                    if (selection == null)
+                    {
+                        var skipped = mode == "premium"
+                            ? planResolution.Skipped.SingleOrDefault(candidate => candidate.ExtensionId == apps[index])
+                            : null;
+                        var reason = skipped == null
+                            ? "not selected for premium mapping"
+                            : skipped.Reason;
+                        PrintStatus("SKIP", string.Format("[{0:00}/{1:00}] {2} -> {3}", index + 1, apps.Length, apps[index], reason), ConsoleColor.Yellow);
+                    }
+                    else
+                        PrintStatus("TRY", string.Format("[{0:00}/{1:00}] {2} -> local plans {3} ({4})", index + 1, apps.Length, apps[index], string.Join(",", selection.Plans), selection.Source), ConsoleColor.Cyan);
                 }
+                if (mode == "premium" && planResolution.Skipped.Length > 0)
+                    Console.WriteLine("  Unmapped extensions are intentionally not patched.");
                 Console.WriteLine();
-                Console.WriteLine("  Each row enables an extension-ID guard in the shared Core binary.");
+                Console.WriteLine("  Each mapped row enables an extension-ID guard with its own plan list in the shared Core method.");
                 Console.WriteLine("  Runtime SetIL results appear below when --wait-ms is supplied and in the profiler log.");
             }
 
@@ -318,13 +348,12 @@ namespace OverwolfPatcher.Testing
             start.EnvironmentVariables.Remove("OVERWOLF_PATCHER_APP");
             start.EnvironmentVariables.Remove("OVERWOLF_PATCHER_APPS");
             start.EnvironmentVariables.Remove("OVERWOLF_PATCHER_PLANS");
+            start.EnvironmentVariables.Remove("OVERWOLF_PATCHER_PREMIUM_MAP");
             start.EnvironmentVariables.Remove("OVERWOLF_PATCHER_PROFILER_VERBOSE");
             if (verbose) start.EnvironmentVariables["OVERWOLF_PATCHER_PROFILER_VERBOSE"] = "1";
             if (mode == "premium")
             {
-                start.EnvironmentVariables["OVERWOLF_PATCHER_APPS"] = string.Join(",", apps);
-                if (!allExtensions) start.EnvironmentVariables["OVERWOLF_PATCHER_APP"] = app;
-                start.EnvironmentVariables["OVERWOLF_PATCHER_PLANS"] = string.Join(",", plans);
+                start.EnvironmentVariables["OVERWOLF_PATCHER_PREMIUM_MAP"] = planResolution.ToEnvironmentValue();
             }
             var launchedPid = 0;
             using (var process = Process.Start(start))

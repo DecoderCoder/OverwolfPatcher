@@ -4,7 +4,7 @@ using OverWolf.Client.Core.ODKv2.Profile;
 
 internal static class Program
 {
-    const string App = "cghphpbjeabdkomiphingnegihoigeggcfphdofo";
+    const string App = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     const string OtherApp = "pppppppppppppppppppppppppppppppppppppppp";
 
     static int Main()
@@ -12,9 +12,9 @@ internal static class Program
         var instance = new OverwolfSubscription { UID = App };
         var detailed = instance.GetExtensionSubscriptions();
         var ids = instance.GetExtensionSubscriptionsIds();
-        if (detailed.Length != 1 || detailed[0].PlanId != 61 ||
+        if (detailed.Length != 1 || detailed[0].PlanId != 101 ||
             detailed[0].State != ODKv2API.SubscriptionState.Active ||
-            ids.SequenceEqual(new[] { 61 }) == false)
+            ids.SequenceEqual(new[] { 101 }) == false)
         {
             Console.Error.WriteLine("Profiler replacement did not execute.");
             return 1;
@@ -27,11 +27,20 @@ internal static class Program
         var otherInstance = new OverwolfSubscription { UID = OtherApp };
         var otherDetailed = otherInstance.GetExtensionSubscriptions();
         var otherIds = otherInstance.GetExtensionSubscriptionsIds();
-        if (otherDetailed.Length != 1 || otherDetailed[0].PlanId != 61 ||
+        if (otherDetailed.Length != 2 || otherDetailed[0].PlanId != 202 || otherDetailed[1].PlanId != 203 ||
             otherDetailed[0].State != ODKv2API.SubscriptionState.Active ||
-            otherIds.SequenceEqual(new[] { 61 }) == false)
+            otherIds.SequenceEqual(new[] { 202, 203 }) == false)
         {
-            Console.Error.WriteLine("Profiler replacement did not execute for the second configured extension.");
+            Console.Error.WriteLine("Profiler replacement did not use the second extension's plan mapping.");
+            return 1;
+        }
+        var unknownInstance = new OverwolfSubscription { UID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" };
+        var unknownDetailed = unknownInstance.GetExtensionSubscriptions();
+        var unknownIds = unknownInstance.GetExtensionSubscriptionsIds();
+        if (unknownDetailed.Length != 1 || unknownDetailed[0].PlanId != 7 ||
+            unknownIds.SequenceEqual(new[] { 7 }) == false)
+        {
+            Console.Error.WriteLine("Profiler replacement changed an unmapped extension.");
             return 1;
         }
         Console.WriteLine("PASS: x64 startup profiler replaced both fixture methods before JIT.");
