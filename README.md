@@ -1,6 +1,6 @@
 <div align="center">
   <h1>OverwolfPatcher</h1>
-  <p>Shape-driven, in-memory CLR instrumentation for investigating local Overwolf extension feature gates.<br><b>Read the research behind this collaborative work here:<br>https://www.brunotrigueiro.com/writing/2ff62de4-c03c-49a2-b4d5-cfa4e10b795d/</b></p>
+  <p>Shape-driven, in-memory CLR instrumentation for investigating local Overwolf extension feature gates.</p>
 
   <p>
     <a href="#project-stopping-point">Project status</a> •
@@ -38,9 +38,6 @@
 > integration: make the user's normal Overwolf shortcut/protocol entry point
 > start `OverwolfPatcher.exe`, which in turn starts Overwolf, rather than letting
 > the user accidentally launch the uninstrumented Overwolf executable directly.
-
-> [!WARNING]
-> This is an experimental research tool. It changes managed method bodies in a running process and is not an Overwolf-supported extension. It uses metadata shape checks instead of a version allow-list, so updates can still be incompatible. Do not use it to represent a paid account entitlement.
 
 ## Overview
 
