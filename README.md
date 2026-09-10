@@ -1,9 +1,13 @@
 <div align="center">
   <h1>OverwolfPatcher</h1>
-  <p>Version-pinned, in-memory CLR instrumentation for investigating local Outplayed premium feature gates.<br><b>You can also read the research on how I built this here: <br>https://www.brunotrigueiro.com/writing/cracking-overwolf-when-modifying-the-binary-stops-working/</b></p>
-  
-  <br>
-  
+  <p>Shape-driven, in-memory CLR instrumentation for investigating local Overwolf extension feature gates.<br><b>You can also read the research on how I built this here: <br>https://www.brunotrigueiro.com/writing/cracking-overwolf-when-modifying-the-binary-stops-working/</b></p>
+
+  <p>
+    <a href="#getting-started">Getting started</a> •
+    <a href="#how-it-works">How it works</a> •
+    <a href="#validation-status">Validation</a> •
+    <a href="#troubleshooting">Troubleshooting</a>
+  </p>
 
   <p>
     <a href="#validation-status"><img src="https://img.shields.io/badge/status-experimental-orange" alt="Experimental status"/></a>
@@ -20,29 +24,29 @@
 </div>
 
 > [!WARNING]
-> This is an experimental, version-pinned research tool. It changes managed method bodies in a running process and is not an Overwolf-supported extension. Use it only with a clean installation that matches the reviewed build. Do not use it to represent a paid account entitlement.
+> This is an experimental research tool. It changes managed method bodies in a running process and is not an Overwolf-supported extension. It uses metadata shape checks instead of a version allow-list, so updates can still be incompatible. Do not use it to represent a paid account entitlement.
 
 ## Overview
 
-Current Overwolf builds can reject a rewritten `OverWolf.Client.Core.dll` before login because rewriting changes the signed file. This project uses the CLR profiling API instead: the signed DLL remains unchanged on disk, while two reviewed methods are replaced in memory before the JIT compiles them.
+Overwolf builds can reject a rewritten `OverWolf.Client.Core.dll` before login because rewriting changes the signed file. This project uses the CLR profiling API instead: the signed DLL remains unchanged on disk, while two compatible subscription methods are replaced in memory before the JIT compiles them.
 
-The current adapter targets:
+The current adapter selects:
 
-| Component | Reviewed version or identity |
+| Component | Runtime selection |
 | --- | --- |
-| Overwolf | `0.309.0.14` |
-| Outplayed | `175.3.12981` |
-| Core module | `OverWolf.Client.Core.dll`, pinned SHA-256 and MVID |
-| Target methods | `GetExtensionSubscriptions()` and `GetExtensionSubscriptionsIds()` |
-| Test date | 2026-09-08 |
+| Overwolf | Active managed assembly directory from launcher probing paths |
+| Extensions | All valid 40-character IDs under the user-data `Extensions` directory |
+| Core module | `OverWolf.Client.Core.dll`, selected by module name |
+| Target methods | Metadata-identified `GetExtensionSubscriptions()` and `GetExtensionSubscriptionsIds()` |
+| Compatibility | Required method/property signatures and IL shape |
 
-Unknown versions, hashes, architectures, and target metadata are refused. Updates can invalidate the adapter.
+Unknown metadata shapes, architectures, or required members are refused. Updates can still invalidate the adapter.
 
 ## What changed from the previous approach
 
 The earlier implementation used Mono.Cecil to rewrite Core on disk. Even when the rewrite was limited to the two subscription methods, the resulting file no longer satisfied the launcher’s verification path and also lost the publisher Authenticode signature. A no-op Cecil round trip was enough to fail the relevant offline predicate, so reducing the number of edited instructions could not make that design reliable.
 
-The current implementation keeps the installed Core file byte-for-byte unchanged. A native x64 CLR profiler receives JIT callbacks for the authorized `Overwolf.exe` process, checks the exact reviewed Core identity and target metadata, and supplies equivalent or premium IL through `SetILFunctionBody` before compilation. The change lasts for the current instrumented session and is not persisted by the patcher.
+The current implementation keeps the installed Core file byte-for-byte unchanged. A native x64 CLR profiler receives JIT callbacks for the authorized `Overwolf.exe` process, resolves the target methods and members from metadata, and supplies equivalent or premium IL through `SetILFunctionBody` before compilation. The change lasts for the current instrumented session and is not persisted by the patcher.
 
 | Previous on-disk rewrite | Current CLR profiler |
 | --- | --- |
@@ -51,18 +55,26 @@ The current implementation keeps the installed Core file byte-for-byte unchanged
 | Subject to launcher file verification | Uses the CLR profiling API in process memory |
 | Could require restore after every attempt | Ends when the instrumented process exits |
 | Could not preserve the current publisher signature | Does not alter the publisher-signed file |
-| Broad legacy patch sequence | Two version-pinned subscription methods |
+| Broad legacy patch sequence | Two metadata-identified subscription methods |
 
 ## Features
 
-- x64 native CLR profiler with strict Core hash, MVID, architecture, and target metadata checks.
+- x64 native CLR profiler with architecture and target metadata-shape checks.
 - Process isolation: profiling is intended for the authorized managed `Overwolf.exe` child launched by `OverwolfLauncher.exe -from-desktop`.
 - Diagnostic modes for separating startup, callback, flag, and IL-replacement failures.
 - `neutral` mode that preserves the reviewed original behavior while testing replacement mechanics.
-- `premium` mode that returns the local legacy Outplayed plan fixture (`61`) for the selected extension.
+- `premium` mode that returns configured local plan fixtures. Outplayed uses plan `61`; Porofessor uses plan `63`.
 - Original IL, locals, branches, exception regions, and method metadata are retained where required by the adapter.
 - Inlining and NGEN are disabled process-wide for instrumented launches so the replacement can be observed before JIT compilation.
 - x64 fixture and offline tests for both target methods.
+
+## TODO
+
+- [ ] Replace the provisional shared `--plans` list with per-extension plan
+  resolution. The patcher must not guess that every extension uses Outplayed's
+  plan `61` or Porofessor's plan `63`; investigate what in each extension's
+  subscription/premium implementation determines its plan ID, then generate
+  the matching result for every extension selected by `--all-extensions`.
 
 ## How it works
 
@@ -71,8 +83,8 @@ flowchart LR
     L[OverwolfPatcher launcher] --> S[OverwolfLauncher.exe -from-desktop]
     S --> O[Authorized Overwolf.exe]
     O --> P[CLR x64 profiler]
-    P --> J[JIT callback for reviewed method]
-    J --> V[Verify Core hash, MVID, architecture, metadata]
+    P --> J[JIT callback for subscription method]
+    J --> V[Validate module name, architecture, and metadata shape]
     J --> I[SetILFunctionBody in memory]
     I --> C[Outplayed subscription queries]
     C --> F[Local feature gates and ad decisions]
@@ -84,7 +96,7 @@ Only the local decision path is affected. Outplayed may still display `Outplayed
 
 ### Requirements
 
-- Windows with the reviewed x64 Overwolf installation.
+- Windows with an x64 Overwolf installation.
 - .NET 8 SDK for building the launcher and tests.
 - .NET Framework 4.8 runtime.
 - Visual Studio x64 C++ build tools and Windows SDK for the native profiler.
@@ -113,6 +125,18 @@ The test build currently passes. `NU1900` warnings may appear when NuGet cannot 
 
 After building, run from the executable directory and close existing Overwolf processes before each run:
 
+With no arguments, the launcher uses the local premium fixture for every
+installed extension ID it finds under the Overwolf user-data `Extensions`
+directory. This is equivalent to:
+
+```powershell
+.\OverwolfPatcher.exe instrument --mode premium --all-extensions --plans 61,63
+```
+
+Add `--verbose --wait-ms 5000` to print each configured extension attempt and
+the profiler's runtime results after launch. A bare launch enables verbose
+output automatically, but returns immediately unless a wait time is provided.
+
 ```powershell
 cd .\OverwolfPatcher\bin\Release\net48
 .\OverwolfPatcher.exe baseline --entry launcher --wait-ms 5000
@@ -127,7 +151,7 @@ Use the diagnostic modes in order when investigating a new installation or build
 .\OverwolfPatcher.exe instrument --mode flags --wait-ms 5000
 ```
 
-After the baseline and diagnostics succeed, test the reviewed neutral and local premium modes:
+After the baseline and diagnostics succeed, test the neutral and local premium modes:
 
 ```powershell
 .\OverwolfPatcher.exe instrument --mode neutral
@@ -136,7 +160,14 @@ After the baseline and diagnostics succeed, test the reviewed neutral and local 
   --plans 61
 ```
 
-`baseline` launches without profiling and captures visible Overwolf window text. `bootstrap` tests profiler startup, `observe` records modules and callbacks, and `flags` adds CLR flags without replacing method bodies. `neutral` replaces both methods with equivalent original IL. `premium` uses the local legacy plan fixture after the same identity checks. Logs are written under `artifacts\profiler` unless an explicit log path is provided.
+`baseline` launches without profiling and captures visible Overwolf window text. `bootstrap` tests profiler startup, `observe` records modules and callbacks, and `flags` adds CLR flags without replacing method bodies. `neutral` replaces both methods with equivalent original IL. `premium` uses the local legacy plan fixture after the metadata-shape checks. Logs are written under `artifacts\profiler` unless an explicit log path is provided.
+
+Use `--all-extensions` with `instrument --mode premium` to select every valid
+installed extension ID. `--data DIR` overrides the user-data directory when
+the default registry or `%LOCALAPPDATA%\Overwolf` location is not the one in
+use. Plan `61` is the reviewed Outplayed fixture; applying that same local
+value to every extension is supported, but individual apps may use different
+plan IDs or subscription providers and therefore may not react to it.
 
 The older commands remain available for offline compatibility inspection:
 
@@ -145,7 +176,7 @@ The older commands remain available for offline compatibility inspection:
 .\OverwolfPatcher.exe stage
 ```
 
-`apply` is intentionally refused for the reviewed live version because on-disk Core rewriting is incompatible with its verification behavior. The legacy `restore --backup PATH` command still performs guarded restoration of old on-disk patch backups; the CLR profiler itself does not require installation changes or restoration.
+`apply` remains an on-disk compatibility test and can still be rejected by assembly/signature guards; it is not required for the profiler workflow. The legacy `restore --backup PATH` command still performs guarded restoration of old on-disk patch backups; the CLR profiler itself does not require installation changes or restoration.
 
 ## Validation status
 
@@ -168,25 +199,25 @@ Run the baseline and instrumented commands as the interactive account that owns 
 
 ### “Go Premium” still appears
 
-Confirm that Overwolf was started by the instrument command, that all existing Overwolf processes were closed, and that the profiler log records the reviewed Core identity, both `SetILFunctionBody` results, and a fresh PID. Ordinary shortcut launches do not inherit the profiling environment.
+Confirm that Overwolf was started by the instrument command, that all existing Overwolf processes were closed, and that the profiler log records the compatible Core metadata shape, both `SetILFunctionBody` results, and a fresh PID. Ordinary shortcut launches do not inherit the profiling environment.
 
 ### The plan screen says Free
 
 That is expected for this fixture. The local premium boolean and the visible aggregate plan are separate code paths; the aggregate selector excludes active legacy Overwolf plans. This project does not modify the account or fabricate a Tebex response.
 
-### The profiler refuses the installation
+### The profiler cannot find the subscription API
 
-Do not bypass the identity checks. Record the installed Overwolf and Outplayed versions, Core SHA-256, MVID, architecture, and profiler log. A client update requires a new compatibility investigation and adapter review.
+Record the installed Overwolf and Outplayed versions, architecture, required method/property signatures, and profiler log. The profiler refuses to patch when the expected subscription metadata shape is missing.
 
 ### Updates remove the behavior
 
-The profiler is process-local and has no persistent upgrade mechanism. Restart the instrumented command after every Overwolf update and revalidate the pinned identity first.
+The profiler is process-local and has no persistent upgrade mechanism. Restart the instrumented command after every Overwolf update and review the metadata-shape result in the log.
 
 ## Project layout
 
 ```text
 native/                         x64 CLR profiler and compatibility interfaces
-OverwolfPatcher/Commands/       launcher, version checks, and diagnostic commands
+OverwolfPatcher/Commands/       launcher, metadata discovery, and diagnostic commands
 OverwolfPatcher/Legacy/         retained historical workflow
 OverwolfPatcher.Runtime/        retired compatibility stub; unsafe redirects refused
 tests/ProfilerFixture/          synthetic Core-shaped assembly

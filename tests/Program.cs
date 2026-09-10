@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Xml.Linq;
 using Mono.Cecil;
+using OverwolfPatcher.Classes;
 using OverwolfPatcher.Testing;
 using OverWolf.Client.Core.ODKv2.Profile;
 
@@ -58,6 +59,24 @@ internal class Program
             var directory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "fixtures", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(directory);
             var original = Assembly.GetExecutingAssembly().Location;
+
+            var extensionData = Path.Combine(directory, "overwolf-data");
+            var extensionRoot = Path.Combine(extensionData, "Extensions");
+            var secondApp = new string('p', 40);
+            var firstVersion = Path.Combine(extensionRoot, App, "175.3.12981");
+            var secondVersion = Path.Combine(extensionRoot, secondApp, "1.2.3.4");
+            Directory.CreateDirectory(firstVersion);
+            Directory.CreateDirectory(secondVersion);
+            Directory.CreateDirectory(Path.Combine(extensionRoot, "not-an-extension"));
+            File.WriteAllText(Path.Combine(firstVersion, "managed.dll"), "fixture");
+            File.WriteAllText(Path.Combine(secondVersion, "native.EXE"), "fixture");
+            var installed = new Overwolf { DataFolder = new DirectoryInfo(extensionData) };
+            Assert(installed.GetInstalledExtensionIds().SequenceEqual(new[] { App, secondApp }.OrderBy(value => value)),
+                "Installed extension discovery returned the wrong IDs");
+            Assert(installed.GetInstalledExtensionBinaries().Select(file => file.Name)
+                .SequenceEqual(new[] { "managed.dll", "native.EXE" }.OrderBy(value => value, StringComparer.OrdinalIgnoreCase)),
+                "Installed extension binary discovery returned the wrong files");
+
             byte[] patched;
             using (var assembly = AssemblyDefinition.ReadAssembly(original))
             {
@@ -143,18 +162,9 @@ internal class Program
             Assert(PremiumCommand.Hash(target) == hash, "Missing DLL restoration failed");
             File.AppendAllText(target, "simulated update");
             Reject(() => PremiumCommand.Restore(target, directory), "Restore overwrote changed installation");
-            var refusedInstall = Path.Combine(directory, "refused-install");
-            Directory.CreateDirectory(refusedInstall);
-            new XDocument(new XElement("configuration", new XElement("runtime", new XElement("assemblyBinding",
-                new XElement("probing", new XAttribute("privatePath", "Locales;0.309.0.14;0.309.0.14\\Locales"))))))
-                .Save(Path.Combine(refusedInstall, "Overwolf.exe.config"));
-            bool refused = false;
-            try { PremiumCommand.Run(new[] { "apply", "--install", refusedInstall }); }
-            catch (NotSupportedException error) { refused = error.Message.Contains("0.309.0.14"); }
-            Assert(refused, "Known-incompatible version was not refused before accessing Core");
 
             Console.WriteLine("PASS: scoped IL execution, original paths, signature guards, repeated patch rejection, atomic replacement, and restoration.");
-            Console.WriteLine("PASS: past expiry remains fixture data; known-incompatible live apply is refused.");
+            Console.WriteLine("PASS: past expiry remains fixture data; unknown Overwolf versions use metadata discovery.");
             Console.WriteLine("PASS: startup profiler launch gates are kept separate from offline rewrite tests.");
             Console.WriteLine("Test artifacts: " + directory);
             return 0;

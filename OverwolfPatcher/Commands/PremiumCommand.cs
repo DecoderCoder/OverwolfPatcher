@@ -12,55 +12,75 @@ using System.Threading;
 using System.Xml.Linq;
 using Microsoft.Win32;
 using Mono.Cecil;
+using OverwolfPatcher.Classes;
 
 namespace OverwolfPatcher.Testing
 {
     internal static class PremiumCommand
     {
         const string Outplayed = "cghphpbjeabdkomiphingnegihoigeggcfphdofo";
-        const string ReviewedVersion = "0.309.0.14";
-        const string ReviewedCoreHash = "9DA15E0CACF446E59B3F728BA78F5CC8F0EC6D6616BB0F490BF90ABD21EF098E";
+        const string Porofessor = "pibhbkkgefgheeglaeemkkfjlhidhcedalapdggh";
+        const string OutplayedPlan = "61";
+        const string AllExtensionPlans = "61,63";
         const string ProfilerClsid = "{4D7C38E9-7C8A-4F5D-9D2C-1D3E7BC9F1A4}";
         internal static int Run(string[] args)
         {
-            var command = args.Length == 0 ? "status" : args[0].ToLowerInvariant();
+            var noArguments = args.Length == 0;
+            var command = noArguments ? "instrument" : args[0].ToLowerInvariant();
             if (command == "--help" || command == "help")
             {
                 Console.WriteLine("OverwolfPatcher status|stage|apply|restore|baseline|instrument [--install DIR] [--output DIR] [--backup DIR]");
+                Console.WriteLine("No arguments launches instrument --mode premium --all-extensions with known local plans 61,63.");
                 Console.WriteLine("stage/apply default to Outplayed plan 61. Other apps: --app EXTENSION_ID --plans 1,2");
                 Console.WriteLine("status is read-only. stage writes a copy. apply/restore require Overwolf to be closed.");
                 Console.WriteLine("baseline launches OverwolfLauncher.exe without profiling; use --entry managed to reproduce direct Overwolf.exe.");
                 Console.WriteLine("instrument launches OverwolfLauncher.exe so profiling reaches only its managed Overwolf.exe child; --mode bootstrap|observe|flags|neutral|premium (default neutral).");
-                Console.WriteLine("instrument options: --mode MODE --profiler PROFILER_X64_DLL --log LOG_FILE --wait-ms N");
+                Console.WriteLine("instrument options: --mode MODE --profiler PROFILER_X64_DLL --log LOG_FILE --wait-ms N [--verbose]");
+                Console.WriteLine("instrument premium options: --app EXTENSION_ID or --all-extensions [--data DIR], plus --plans 1,2");
                 Console.WriteLine("Local legacy subscription API testing only; login is required. No server subscription is granted.");
                 return 0;
             }
             if (!new[] { "status", "stage", "apply", "restore", "baseline", "instrument" }.Contains(command)) throw new ArgumentException("Unknown command. Use --help.");
             var options = new Dictionary<string, string>();
-            for (int i = 1; i < args.Length; i += 2)
+            if (noArguments)
             {
-                if (i + 1 == args.Length || !new[] { "--install", "--output", "--backup", "--app", "--plans", "--mode", "--profiler", "--log", "--wait-ms", "--entry" }.Contains(args[i]) || options.ContainsKey(args[i]))
+                options.Add("--all-extensions", "true");
+                options.Add("--mode", "premium");
+                options.Add("--verbose", "true");
+            }
+            var flags = new[] { "--all-extensions", "--verbose" };
+            for (int i = 1; i < args.Length; i++)
+            {
+                if (flags.Contains(args[i]))
+                {
+                    if (options.ContainsKey(args[i])) throw new ArgumentException("Invalid or duplicate option: " + args[i]);
+                    options.Add(args[i], "true");
+                    continue;
+                }
+                if (i + 1 == args.Length || !new[] { "--install", "--output", "--backup", "--app", "--plans", "--mode", "--profiler", "--log", "--wait-ms", "--entry", "--data" }.Contains(args[i]) || options.ContainsKey(args[i]))
                     throw new ArgumentException("Invalid or duplicate option: " + args[i]);
                 options.Add(args[i], args[i + 1]);
+                i++;
             }
             var install = Path.GetFullPath(Get(options, "--install", DiscoverInstall()));
             var version = ActiveVersion(install);
             var target = Path.Combine(install, version, PremiumAssembly.FileName);
             if (command == "baseline") return Baseline(install, version, options);
             if (command == "instrument") return Instrument(install, version, target, options);
-            // Confirmed in live testing: this launcher verifies Core before login.
-            // A structurally valid staged assembly is not a deployable assembly.
-            if (command == "apply" && version == "0.309.0.14")
-                throw new NotSupportedException("Overwolf 0.309.0.14 rejects modified Client.Core at startup. Live apply is disabled; use stage for offline investigation.");
             if (command == "restore")
             {
                 RequireStopped();
                 Restore(target, Get(options, "--backup", null) ?? throw new ArgumentException("restore requires --backup DIR"));
                 return 0;
             }
+            var allExtensions = options.ContainsKey("--all-extensions");
+            if (allExtensions && command != "instrument")
+                throw new ArgumentException("--all-extensions is supported only with instrument --mode premium.");
             var app = Get(options, "--app", Outplayed);
+            if (allExtensions && options.ContainsKey("--app"))
+                throw new ArgumentException("Use either --app or --all-extensions, not both.");
             if (app.Length != 40 || app.Any(c => c < 'a' || c > 'p')) throw new ArgumentException("Expected a 40-character Overwolf extension ID.");
-            var planText = Get(options, "--plans", app == Outplayed ? "61" : null)
+            var planText = Get(options, "--plans", app == Outplayed ? OutplayedPlan : null)
                 ?? throw new ArgumentException("Specify --plans for this app.");
             var plans = planText.Split(',').Select(int.Parse).Distinct().ToArray();
             if (plans.Length == 0 || plans.Length > 32 || plans.Any(p => p <= 0)) throw new ArgumentException("Specify 1 to 32 positive plan IDs.");
@@ -159,8 +179,10 @@ namespace OverwolfPatcher.Testing
             var config = XDocument.Load(Path.Combine(install, "Overwolf.exe.config"));
             var paths = config.Descendants().Where(e => e.Name.LocalName == "probing")
                 .SelectMany(e => ((string)e.Attribute("privatePath") ?? "").Split(';'))
-                .Where(p => Version.TryParse(p, out _) && p.Split('.').Length == 4).Distinct().ToArray();
-            if (paths.Length != 1) throw new IOException("Cannot uniquely identify the active Overwolf version from its launcher configuration.");
+                .Select(p => p.Trim())
+                .Where(p => p.Length > 0 && File.Exists(Path.Combine(install, p, PremiumAssembly.FileName)))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            if (paths.Length != 1) throw new IOException("Cannot uniquely identify the active Core assembly directory from the launcher configuration.");
             return paths[0];
         }
 
@@ -169,6 +191,21 @@ namespace OverwolfPatcher.Testing
             using (var machine = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32))
             using (var key = machine.OpenSubKey(@"SOFTWARE\Overwolf"))
                 return key?.GetValue("InstallFolder") as string ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Overwolf");
+        }
+
+        static string DiscoverDataFolder()
+        {
+            using (var user = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Default))
+            using (var key = user.OpenSubKey(Overwolf.MainRegKey))
+                return key?.GetValue("UserDataFolder") as string ?? Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Overwolf");
+        }
+
+        static string[] DiscoverInstalledExtensionIds(Dictionary<string, string> options)
+        {
+            var dataFolder = Path.GetFullPath(Get(options, "--data", DiscoverDataFolder()));
+            var overwolf = new Overwolf { DataFolder = new DirectoryInfo(dataFolder) };
+            return overwolf.GetInstalledExtensionIds().ToArray();
         }
 
         static void RequireStopped()
@@ -182,11 +219,8 @@ namespace OverwolfPatcher.Testing
 
         static int Instrument(string install, string version, string target, Dictionary<string, string> options)
         {
-            if (version != ReviewedVersion)
-                throw new NotSupportedException("The startup profiler is pinned to Overwolf " + ReviewedVersion + "; refusing an unknown version.");
             RequireStopped();
-            if (!File.Exists(target) || Hash(target) != ReviewedCoreHash)
-                throw new IOException("The installed Core hash is not the reviewed clean baseline; refusing to profile it.");
+            if (!File.Exists(target)) throw new FileNotFoundException("The managed Core assembly was not found.", target);
 
             var executable = Path.Combine(install, "Overwolf.exe");
             var launcher = Path.Combine(install, "OverwolfLauncher.exe");
@@ -203,9 +237,22 @@ namespace OverwolfPatcher.Testing
             if (mode != "bootstrap" && mode != "observe" && mode != "flags" && mode != "neutral" && mode != "premium")
                 throw new ArgumentException("--mode must be bootstrap, observe, flags, neutral, or premium.");
 
+            var allExtensions = options.ContainsKey("--all-extensions");
+            var verbose = options.ContainsKey("--verbose") || allExtensions;
+            if (allExtensions && mode != "premium")
+                throw new ArgumentException("--all-extensions requires --mode premium.");
+            if (allExtensions && options.ContainsKey("--app"))
+                throw new ArgumentException("Use either --app or --all-extensions, not both.");
+
             var app = Get(options, "--app", Outplayed);
             if (app.Length != 40 || app.Any(c => c < 'a' || c > 'p')) throw new ArgumentException("Expected a 40-character Overwolf extension ID.");
-            var planText = Get(options, "--plans", app == Outplayed ? "61" : null);
+            var apps = allExtensions ? DiscoverInstalledExtensionIds(options) : new[] { app };
+            if (apps.Length == 0)
+                throw new IOException("No installed Overwolf extensions were found.");
+            if (apps.Length > 256)
+                throw new ArgumentException("At most 256 installed extensions can be selected for one instrumented session.");
+            var defaultPlans = allExtensions ? AllExtensionPlans : (app == Outplayed ? OutplayedPlan : null);
+            var planText = Get(options, "--plans", defaultPlans);
             if (mode == "premium" && planText == null) throw new ArgumentException("Specify --plans for this app in premium mode.");
             var plans = mode == "premium"
                 ? planText.Split(',').Select(int.Parse).Distinct().ToArray()
@@ -219,6 +266,28 @@ namespace OverwolfPatcher.Testing
                 "artifacts", "profiler", version + "-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + ".log")));
             var logDirectory = Path.GetDirectoryName(log);
             if (!string.IsNullOrWhiteSpace(logDirectory)) Directory.CreateDirectory(logDirectory);
+
+            if (verbose)
+            {
+                PrintSection("OVERWOLF PATCHER");
+                PrintKeyValue("Mode", mode.ToUpperInvariant() + " (in-memory)");
+                PrintKeyValue("Overwolf version", version);
+                PrintKeyValue("Target binary", target);
+                PrintKeyValue("Profiler", profiler);
+                PrintKeyValue("Plans", plans.Length == 0 ? "original methods" : string.Join(",", plans));
+                PrintKeyValue("Patch scope", allExtensions ? "all installed extensions" : "selected extension");
+                PrintStatus("OK", "Overwolf processes are stopped and launcher/Core path checks passed.", ConsoleColor.Green);
+
+                PrintSection("EXTENSION PATCH ATTEMPTS");
+                for (var index = 0; index < apps.Length; index++)
+                {
+                    var planDescription = plans.Length == 0 ? "original methods" : "local plans " + string.Join(",", plans);
+                    PrintStatus("TRY", string.Format("[{0:00}/{1:00}] {2} -> {3}", index + 1, apps.Length, apps[index], planDescription), ConsoleColor.Cyan);
+                }
+                Console.WriteLine();
+                Console.WriteLine("  Each row enables an extension-ID guard in the shared Core binary.");
+                Console.WriteLine("  Runtime SetIL results appear below when --wait-ms is supplied and in the profiler log.");
+            }
 
             // Some hosted shells expose both Path and PATH. .NET Framework's
             // ProcessStartInfo turns the inherited block into a case-insensitive
@@ -246,10 +315,15 @@ namespace OverwolfPatcher.Testing
             start.EnvironmentVariables["OVERWOLF_PATCHER_PROFILER_LOG_PER_PROCESS"] = "1";
             start.EnvironmentVariables["OVERWOLF_PATCHER_PROFILER_MODE"] = mode;
             start.EnvironmentVariables["OVERWOLF_PATCHER_PROFILER_LOG"] = log;
-            start.EnvironmentVariables["OVERWOLF_PATCHER_EXPECTED_CORE_SHA256"] = ReviewedCoreHash;
+            start.EnvironmentVariables.Remove("OVERWOLF_PATCHER_APP");
+            start.EnvironmentVariables.Remove("OVERWOLF_PATCHER_APPS");
+            start.EnvironmentVariables.Remove("OVERWOLF_PATCHER_PLANS");
+            start.EnvironmentVariables.Remove("OVERWOLF_PATCHER_PROFILER_VERBOSE");
+            if (verbose) start.EnvironmentVariables["OVERWOLF_PATCHER_PROFILER_VERBOSE"] = "1";
             if (mode == "premium")
             {
-                start.EnvironmentVariables["OVERWOLF_PATCHER_APP"] = app;
+                start.EnvironmentVariables["OVERWOLF_PATCHER_APPS"] = string.Join(",", apps);
+                if (!allExtensions) start.EnvironmentVariables["OVERWOLF_PATCHER_APP"] = app;
                 start.EnvironmentVariables["OVERWOLF_PATCHER_PLANS"] = string.Join(",", plans);
             }
             var launchedPid = 0;
@@ -257,12 +331,28 @@ namespace OverwolfPatcher.Testing
             {
                 if (process == null) throw new InvalidOperationException("Overwolf could not be started.");
                 launchedPid = process.Id;
-                Console.WriteLine("Launched native OverwolfLauncher PID " + process.Id + "; profiler targets managed Overwolf.exe only.");
+                if (verbose)
+                    PrintStatus("OK", "Launched native OverwolfLauncher PID " + process.Id + "; profiler targets managed Overwolf.exe only.", ConsoleColor.Green);
+                else
+                    Console.WriteLine("Launched native OverwolfLauncher PID " + process.Id + "; profiler targets managed Overwolf.exe only.");
                 if (waitMs > 0) CaptureWindows(process.Id, log, waitMs);
             }
-            Console.WriteLine("Mode: " + mode + " | profiler log: " + log);
+            if (verbose)
+            {
+                PrintSection("PATCH RESULTS");
+                PrintKeyValue("Mode", mode);
+                PrintKeyValue("Profiler log", log);
+                if (waitMs > 0) PrintProfilerLogSummary(log);
+                else
+                    PrintStatus("INFO", "Runtime results are still asynchronous; rerun with --wait-ms 5000 to display the log summary.", ConsoleColor.Yellow);
+            }
+            else
+                Console.WriteLine("Mode: " + mode + " | profiler log: " + log);
             if (waitMs > 0) Console.WriteLine("Window diagnostic capture: " + WindowLogPath(log, launchedPid));
-            Console.WriteLine("Installed files were not modified. Remove the profiling environment by launching Overwolf normally.");
+            if (verbose)
+                PrintStatus("OK", "Installed files were not modified. The patch ends when the instrumented Overwolf session exits.", ConsoleColor.Green);
+            else
+                Console.WriteLine("Installed files were not modified. Remove the profiling environment by launching Overwolf normally.");
             return 0;
         }
 
@@ -399,6 +489,93 @@ namespace OverwolfPatcher.Testing
                 if (reader.ReadUInt32() != 0x00004550) return false;
                 return reader.ReadUInt16() == 0x8664;
             }
+        }
+
+        static void PrintSection(string title)
+        {
+            const int width = 70;
+            title = (title ?? string.Empty).Trim();
+            if (title.Length > width - 2) title = title.Substring(0, width - 2);
+            Console.WriteLine();
+            Console.WriteLine("+" + new string('-', width) + "+");
+            Console.WriteLine("| " + title.PadRight(width - 2) + " |");
+            Console.WriteLine("+" + new string('-', width) + "+");
+        }
+
+        static void PrintKeyValue(string name, string value)
+        {
+            Console.WriteLine("  " + (name ?? string.Empty).PadRight(18) + ": " + (value ?? string.Empty));
+        }
+
+        static void PrintStatus(string status, string message, ConsoleColor color)
+        {
+            var previous = Console.ForegroundColor;
+            try
+            {
+                Console.ForegroundColor = color;
+                Console.WriteLine("  [" + (status ?? string.Empty).PadRight(4) + "] " + message);
+            }
+            finally { Console.ForegroundColor = previous; }
+        }
+
+        static void PrintProfilerLogSummary(string log)
+        {
+            var files = GetProfilerLogFiles(log).ToArray();
+            if (files.Length == 0)
+            {
+                PrintStatus("WARN", "No profiler log has been written yet.", ConsoleColor.Yellow);
+                return;
+            }
+
+            var printed = 0;
+            foreach (var file in files)
+            {
+                string[] lines;
+                try { lines = File.ReadAllLines(file); }
+                catch (IOException error)
+                {
+                    PrintStatus("WARN", "Could not read " + file + ": " + error.Message, ConsoleColor.Yellow);
+                    continue;
+                }
+
+                foreach (var line in lines.Where(IsPatchLogLine))
+                {
+                    var succeeded = line.IndexOf("SetILFunctionBody detailed=ok ids=ok", StringComparison.OrdinalIgnoreCase) >= 0;
+                    var failed = line.IndexOf("failed", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 line.IndexOf("refusing", StringComparison.OrdinalIgnoreCase) >= 0;
+                    PrintStatus(succeeded ? "OK" : failed ? "FAIL" : "LOG",
+                        Path.GetFileName(file) + ": " + line, succeeded ? ConsoleColor.Green : failed ? ConsoleColor.Red : ConsoleColor.Gray);
+                    printed++;
+                }
+            }
+            if (printed == 0)
+                PrintStatus("INFO", "Profiler started, but no patch result has been logged during the wait period.", ConsoleColor.Yellow);
+        }
+
+        static bool IsPatchLogLine(string line)
+        {
+            return line.IndexOf("premium extension", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   line.IndexOf("profiler initialized", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   line.IndexOf("SetILFunctionBody", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   line.IndexOf("Core module observed", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   line.IndexOf("refusing", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        static IEnumerable<string> GetProfilerLogFiles(string log)
+        {
+            var directory = Path.GetDirectoryName(log) ?? Environment.CurrentDirectory;
+            var baseName = Path.GetFileName(log);
+            if (File.Exists(log)) yield return log;
+            if (!Directory.Exists(directory)) yield break;
+
+            var stem = Path.GetFileNameWithoutExtension(log);
+            var extension = Path.GetExtension(log);
+            foreach (var file in Directory.GetFiles(directory)
+                .Where(path => !string.Equals(Path.GetFileName(path), baseName, StringComparison.OrdinalIgnoreCase) &&
+                               Path.GetFileName(path).StartsWith(stem + ".", StringComparison.OrdinalIgnoreCase) &&
+                               string.Equals(Path.GetExtension(path), extension, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+                yield return file;
         }
 
         static string Get(Dictionary<string, string> options, string name, string fallback) => options.TryGetValue(name, out var value) ? value : fallback;

@@ -19,19 +19,21 @@ internal static class CompatibilityProbe
         if (args.Length != 5)
             throw new ArgumentException("Usage: OverwolfPatcher.Tests --compatibility INSTALL CLEAN_COPY STAGED_COPY ROUNDTRIP_COPY");
         var install = Path.GetFullPath(args[1]);
-        var common = Path.Combine(install, "0.309.0.14", "OverWolf.Client.CommonUtils.dll");
-        var core = Path.Combine(install, "0.309.0.14", PremiumAssembly.FileName);
         var launcher = Path.Combine(install, "Overwolf.exe");
         var config = Path.Combine(install, "Overwolf.exe.config");
+        var activeDirectories = XDocument.Load(config).Descendants().Where(e => e.Name.LocalName == "probing")
+            .SelectMany(e => ((string)e.Attribute("privatePath") ?? "").Split(';'))
+            .Select(p => p.Trim())
+            .Where(p => p.Length > 0 && File.Exists(Path.Combine(install, p, PremiumAssembly.FileName)))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        if (activeDirectories.Length != 1)
+            throw new IOException("Could not uniquely identify the active Core assembly directory.");
+        var activeDirectory = Path.Combine(install, activeDirectories[0]);
+        var common = Path.Combine(activeDirectory, "OverWolf.Client.CommonUtils.dll");
+        var core = Path.Combine(activeDirectory, PremiumAssembly.FileName);
         var copies = args.Skip(2).Select(Path.GetFullPath).ToArray();
         var paths = new[] { common, core, launcher, config }.Concat(copies).Distinct().ToArray();
         var hashes = paths.ToDictionary(p => p, PremiumCommand.Hash);
-        var versions = XDocument.Load(config).Descendants().Where(e => e.Name.LocalName == "probing")
-            .SelectMany(e => ((string)e.Attribute("privatePath") ?? "").Split(';'))
-            .Where(p => Version.TryParse(p, out _) && p.Split('.').Length == 4).Distinct().ToArray();
-        Require(versions.SequenceEqual(new[] { "0.309.0.14" }), "Active installation version is not the reviewed baseline.");
-        // Pin the only proprietary assembly executed by this process to the reviewed
-        // clean version. New versions need a fresh static inspection, not automatic use.
         Require(hashes[common] == CommonHash, "Unreviewed verifier binary; refusing execution.");
         Require(hashes[core] == CoreHash && hashes[copies[0]] == CoreHash, "Clean baseline changed.");
         Console.WriteLine("Read-only compatibility probe; UTC " + DateTime.UtcNow.ToString("o"));

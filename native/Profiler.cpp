@@ -1,6 +1,5 @@
 #include "CorProfilerCompat.h"
 
-#include <bcrypt.h>
 #include <windows.h>
 #include <tlhelp32.h>
 
@@ -9,7 +8,6 @@
 #include <cstdint>
 #include <cstring>
 #include <cwchar>
-#include <iomanip>
 #include <limits>
 #include <map>
 #include <new>
@@ -18,31 +16,10 @@
 #include <string>
 #include <vector>
 
-#pragma comment(lib, "bcrypt.lib")
-
 namespace
 {
     const wchar_t *const kCoreName = L"OverWolf.Client.Core.dll";
     const wchar_t *const kTargetType = L"OverWolf.Client.Core.ODKv2.Profile.OverwolfSubscription";
-    const wchar_t *const kReviewedCoreHash = L"9DA15E0CACF446E59B3F728BA78F5CC8F0EC6D6616BB0F490BF90ABD21EF098E";
-
-    // The adapter is intentionally pinned to the reviewed Core image. These
-    // tokens are checked again by name before any method body is replaced.
-    const mdMethodDef kDetailedMethod = 0x060030B7;
-    const mdMethodDef kIdsMethod = 0x060030B6;
-    const mdMethodDef kUidGetter = 0x06002ABB;
-    const mdToken kStringEquality = 0x0A00033B;
-    const mdToken kPlanConstructor = 0x0A0024F2;
-    const mdToken kPlanIdSetter = 0x0A0024F3;
-    const mdToken kStateSetter = 0x0A0024F5;
-    const mdToken kExpirySetter = 0x0A0024F8;
-    const mdToken kTitleSetter = 0x0A0024FB;
-    const mdToken kDescriptionSetter = 0x0A0024FD;
-    const mdToken kPriceSetter = 0x0A0024FF;
-    const mdToken kPeriodSetter = 0x0A002501;
-
-    const GUID kExpectedMvid =
-        { 0xc8cba78c, 0xaad4, 0x41a2, { 0x9c, 0x0e, 0x1f, 0x19, 0xce, 0x2a, 0xe5, 0x38 } };
 
     volatile LONG g_objectCount = 0;
     volatile LONG g_serverLocks = 0;
@@ -174,53 +151,6 @@ namespace
         std::wstringstream stream;
         stream << L"0x" << std::hex << std::uppercase << static_cast<unsigned long>(hr);
         return stream.str();
-    }
-
-    std::wstring HashFile(const std::wstring &path)
-    {
-        HANDLE file = CreateFileW(path.c_str(), GENERIC_READ,
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
-            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (file == INVALID_HANDLE_VALUE) return std::wstring();
-
-        BCRYPT_ALG_HANDLE algorithm = nullptr;
-        BCRYPT_HASH_HANDLE hash = nullptr;
-        DWORD objectLength = 0;
-        DWORD resultLength = 0;
-        std::wstring result;
-        if (SUCCEEDED(BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0)) &&
-            SUCCEEDED(BCryptGetProperty(algorithm, BCRYPT_OBJECT_LENGTH,
-                reinterpret_cast<PUCHAR>(&objectLength), sizeof(objectLength), &resultLength, 0)))
-        {
-            std::vector<BYTE> object(objectLength);
-            BYTE digest[32]{};
-            if (SUCCEEDED(BCryptCreateHash(algorithm, &hash, object.data(), objectLength,
-                    nullptr, 0, 0)))
-            {
-                BYTE buffer[64 * 1024];
-                DWORD read = 0;
-                bool okay = true;
-                while (ReadFile(file, buffer, sizeof(buffer), &read, nullptr) && read > 0)
-                {
-                    if (FAILED(BCryptHashData(hash, buffer, read, 0)))
-                    {
-                        okay = false;
-                        break;
-                    }
-                }
-                if (okay && SUCCEEDED(BCryptFinishHash(hash, digest, sizeof(digest), 0)))
-                {
-                    std::wstringstream stream;
-                    stream << std::uppercase << std::hex << std::setfill(L'0');
-                    for (BYTE byte : digest) stream << std::setw(2) << static_cast<unsigned>(byte);
-                    result = stream.str();
-                }
-                BCryptDestroyHash(hash);
-            }
-        }
-        if (algorithm) BCryptCloseAlgorithmProvider(algorithm, 0);
-        CloseHandle(file);
-        return result;
     }
 
     bool ReadU16(const std::vector<BYTE> &data, size_t at, USHORT &value)
@@ -393,7 +323,7 @@ namespace
         void Ret() { U8(0x2A); }
     };
 
-    bool BuildBody(const std::vector<BYTE> &original, bool detailed, mdString appString,
+    bool BuildBody(const std::vector<BYTE> &original, bool detailed, const std::vector<mdString> &appStrings,
         mdToken uidGetter, mdToken stringEquality, mdToken planType,
         mdToken intType, mdString titleString, mdString descriptionString,
         const std::vector<int> &plans, const mdToken *planTokens, LONGLONG expiry,
@@ -403,14 +333,24 @@ namespace
         if (!ParseMethodBody(original, parsed)) return false;
         const BYTE *originalCode = original.data() + parsed.codeOffset;
 
+        if (appStrings.empty()) return false;
+
         Bytecode prefix;
-        prefix.U8(0x02); // ldarg.0
-        prefix.Call(uidGetter);
-        prefix.Ldstr(appString);
-        prefix.Call(stringEquality);
-        prefix.U8(0x39); // brfalse (long form)
-        const size_t branchOperand = prefix.data.size();
+        std::vector<size_t> premiumBranchOperands;
+        for (mdString appString : appStrings)
+        {
+            prefix.U8(0x02); // ldarg.0
+            prefix.Call(uidGetter);
+            prefix.Ldstr(appString);
+            prefix.Call(stringEquality);
+            prefix.U8(0x3A); // brtrue (long form) to the local-plan body
+            premiumBranchOperands.push_back(prefix.data.size());
+            prefix.U32(0);
+        }
+        prefix.U8(0x38); // br (long form) to the original body
+        const size_t originalBranchOperand = prefix.data.size();
         prefix.U32(0);
+        const size_t premiumEntry = prefix.data.size();
 
         prefix.LdcI4(static_cast<int>(plans.size()));
         if (detailed) prefix.Newarr(planType);
@@ -453,11 +393,25 @@ namespace
         }
         prefix.Ret();
         const size_t originalEntry = prefix.data.size();
-        const int64_t displacement = static_cast<int64_t>(originalEntry) -
-            static_cast<int64_t>(branchOperand + 4);
-        if (displacement < (std::numeric_limits<LONG>::min)() || displacement > (std::numeric_limits<LONG>::max)()) return false;
-        const ULONG relative = static_cast<ULONG>(static_cast<LONG>(displacement));
-        for (size_t i = 0; i < 4; ++i) prefix.data[branchOperand + i] = static_cast<BYTE>(relative >> (8 * i));
+        const int64_t originalDisplacement = static_cast<int64_t>(originalEntry) -
+            static_cast<int64_t>(originalBranchOperand + 4);
+        if (originalDisplacement < (std::numeric_limits<LONG>::min)() ||
+            originalDisplacement > (std::numeric_limits<LONG>::max)()) return false;
+        const ULONG originalRelative = static_cast<ULONG>(static_cast<LONG>(originalDisplacement));
+
+        const int64_t premiumDisplacement = static_cast<int64_t>(premiumEntry);
+        for (size_t branchOperand : premiumBranchOperands)
+        {
+            const int64_t displacement = premiumDisplacement -
+                static_cast<int64_t>(branchOperand + 4);
+            if (displacement < (std::numeric_limits<LONG>::min)() ||
+                displacement > (std::numeric_limits<LONG>::max)()) return false;
+            const ULONG relative = static_cast<ULONG>(static_cast<LONG>(displacement));
+            for (size_t i = 0; i < 4; ++i)
+                prefix.data[branchOperand + i] = static_cast<BYTE>(relative >> (8 * i));
+        }
+        for (size_t i = 0; i < 4; ++i)
+            prefix.data[originalBranchOperand + i] = static_cast<BYTE>(originalRelative >> (8 * i));
 
         const ULONG codeSize = static_cast<ULONG>(prefix.data.size() + parsed.codeSize);
         if (codeSize > 0x00FFFFFFu) return false;
@@ -583,7 +537,37 @@ namespace
         return false;
     }
 
-    bool FindMemberRefByName(IMetaDataImport *import, mdToken parent, const wchar_t *expected, mdToken &token)
+    bool IsTypeNamed(IMetaDataImport *import, mdToken token, const wchar_t *expected)
+    {
+        wchar_t name[256]{};
+        ULONG written = 0;
+        const ULONG table = token & 0xFF000000u;
+        if (table == 0x01000000u)
+        {
+            mdToken scope = 0;
+            return SUCCEEDED(import->GetTypeRefProps(static_cast<mdTypeRef>(token), &scope,
+                name, ARRAYSIZE(name), &written)) && wcscmp(name, expected) == 0;
+        }
+        if (table == 0x02000000u)
+        {
+            DWORD flags = 0;
+            mdToken extends = 0;
+            return SUCCEEDED(import->GetTypeDefProps(static_cast<mdTypeDef>(token), name,
+                ARRAYSIZE(name), &written, &flags, &extends)) && wcscmp(name, expected) == 0;
+        }
+        return false;
+    }
+
+    bool IsStringEqualityMemberRef(IMetaDataImport *import, mdToken parent,
+        PCCOR_SIGNATURE signature, ULONG signatureSize)
+    {
+        return IsTypeNamed(import, parent, L"System.String") && signatureSize >= 5 &&
+            signature[1] == 2 && signature[2] == 0x02 &&
+            signature[3] == 0x0E && signature[4] == 0x0E;
+    }
+
+    bool FindMemberRefByName(IMetaDataImport *import, mdToken parent, const wchar_t *expected,
+        mdToken &token, bool stringEqualityOnly = false)
     {
         auto searchParent = [&](mdToken candidateParent) -> bool
         {
@@ -601,7 +585,9 @@ namespace
                     ULONG signatureSize = 0;
                     if (SUCCEEDED(import->GetMemberRefProps(refs[i], &actualParent, name, ARRAYSIZE(name),
                         &written, &signature, &signatureSize)) && wcscmp(name, expected) == 0 &&
-                        actualParent == candidateParent)
+                        actualParent == candidateParent &&
+                        (!stringEqualityOnly || IsStringEqualityMemberRef(import, actualParent,
+                            signature, signatureSize)))
                     {
                         import->CloseEnum(enumeration);
                         token = refs[i];
@@ -693,36 +679,45 @@ namespace
             (signature[0] & 0x0F) != 0x05 && signature[1] == 0 && signature[2] == 0x0E;
     }
 
-    bool FindUidGetter(IMetaDataImport *import, mdMethodDef &token, bool flexible)
+    bool ValidateUidGetterMemberRef(IMetaDataImport *import, mdMemberRef token)
     {
-        HCORENUM types = nullptr;
-        mdTypeDef typeTokens[64]{};
-        ULONG typeCount = 0;
-        while (SUCCEEDED(import->EnumTypeDefs(&types, typeTokens, ARRAYSIZE(typeTokens), &typeCount)) && typeCount != 0)
+        wchar_t name[128]{};
+        ULONG written = 0;
+        mdToken parent = 0;
+        PCCOR_SIGNATURE signature = nullptr;
+        ULONG signatureSize = 0;
+        const HRESULT hr = import->GetMemberRefProps(token, &parent, name, ARRAYSIZE(name),
+            &written, &signature, &signatureSize);
+        return SUCCEEDED(hr) && wcscmp(name, L"get_UID") == 0 && signatureSize >= 3 &&
+            (signature[0] & 0x0F) != 0x05 && signature[1] == 0 && signature[2] == 0x0E;
+    }
+
+    bool ValidateUidGetterReference(IMetaDataImport *import, mdToken token)
+    {
+        const ULONG table = token & 0xFF000000u;
+        if (table == 0x06000000u) return ValidateUidGetter(import, static_cast<mdMethodDef>(token));
+        if (table == 0x0A000000u) return ValidateUidGetterMemberRef(import, static_cast<mdMemberRef>(token));
+        return false;
+    }
+
+    bool FindUidGetterInBody(IMetaDataImport *import, const std::vector<BYTE> &body, mdToken &token)
+    {
+        MethodBody parsed;
+        if (!ParseMethodBody(body, parsed)) return false;
+        const size_t end = parsed.codeOffset + parsed.codeSize;
+        // A call/callvirt operand is a metadata token. Checking only valid UID getter
+        // metadata keeps this scan safe even when an operand byte happens to be 0x28/0x6F.
+        for (size_t at = parsed.codeOffset; at + 5 <= end; ++at)
         {
-            for (ULONG t = 0; t < typeCount; ++t)
+            if (body[at] != 0x28 && body[at] != 0x6F) continue;
+            ULONG candidate = 0;
+            if (!ReadU32(body, at + 1, candidate)) continue;
+            if (ValidateUidGetterReference(import, static_cast<mdToken>(candidate)))
             {
-                HCORENUM methods = nullptr;
-                mdMethodDef methodTokens[64]{};
-                ULONG methodCount = 0;
-                while (SUCCEEDED(import->EnumMethods(&methods, typeTokens[t], methodTokens, ARRAYSIZE(methodTokens), &methodCount)) && methodCount != 0)
-                {
-                    for (ULONG m = 0; m < methodCount; ++m)
-                    {
-                        if ((!flexible && methodTokens[m] == kUidGetter || flexible) &&
-                            ValidateUidGetter(import, methodTokens[m]))
-                        {
-                            import->CloseEnum(methods);
-                            import->CloseEnum(types);
-                            token = methodTokens[m];
-                            return true;
-                        }
-                    }
-                }
-                if (methods) import->CloseEnum(methods);
+                token = static_cast<mdToken>(candidate);
+                return true;
             }
         }
-        if (types) import->CloseEnum(types);
         return false;
     }
 
@@ -730,14 +725,14 @@ namespace
     {
         mdMethodDef detailed = 0;
         mdMethodDef ids = 0;
-        mdMethodDef uidGetter = 0;
+        mdToken uidGetter = 0;
         mdToken planType = 0;
         mdToken intType = 0;
         mdToken stringEquality = 0;
         mdToken plan[8]{};
     };
 
-    bool ResolveReviewedTokens(IMetaDataImport *import, AdapterTokens &tokens, bool flexible)
+    bool ResolveSubscriptionTokens(IMetaDataImport *import, AdapterTokens &tokens)
     {
         mdTypeDef owner = 0;
         if (FAILED(import->FindTypeDefByName(kTargetType, 0, &owner)))
@@ -752,22 +747,16 @@ namespace
         {
             for (ULONG i = 0; i < fetched; ++i)
             {
-                if (ValidateMethod(import, candidates[i], L"GetExtensionSubscriptions") &&
-                    (flexible || candidates[i] == kDetailedMethod)) tokens.detailed = candidates[i];
-                if (ValidateMethod(import, candidates[i], L"GetExtensionSubscriptionsIds") &&
-                    (flexible || candidates[i] == kIdsMethod)) tokens.ids = candidates[i];
+                if (ValidateMethod(import, candidates[i], L"GetExtensionSubscriptions"))
+                    tokens.detailed = candidates[i];
+                if (ValidateMethod(import, candidates[i], L"GetExtensionSubscriptionsIds"))
+                    tokens.ids = candidates[i];
             }
         }
         if (methods) import->CloseEnum(methods);
-        if ((!flexible && (tokens.detailed != kDetailedMethod || tokens.ids != kIdsMethod)) ||
-            (flexible && (tokens.detailed == 0 || tokens.ids == 0)))
+        if (tokens.detailed == 0 || tokens.ids == 0)
         {
             Log(L"shape: subscription methods not found");
-            return false;
-        }
-        if (!FindUidGetter(import, tokens.uidGetter, flexible))
-        {
-            Log(L"shape: UID getter not found");
             return false;
         }
         if (!FindTypeRef(import, L"ODKv2API.DetailedActivePlan", tokens.planType))
@@ -777,43 +766,23 @@ namespace
         }
         FindTypeRef(import, L"System.Int32", tokens.intType);
 
-        if (flexible)
+        if (!FindMemberRefByName(import, 0, L"op_Equality", tokens.stringEquality, true))
         {
-            if (!FindMemberRefByName(import, 0, L"op_Equality", tokens.stringEquality))
-            {
-                Log(L"shape: string equality MemberRef not found");
-                return false;
-            }
+            Log(L"shape: string equality MemberRef not found");
+            return false;
         }
-        else
-        {
-            tokens.stringEquality = kStringEquality;
-            if (!ValidateMember(import, tokens.stringEquality, L"op_Equality")) return false;
-        }
-        const mdToken expected[] = {
-            kPlanConstructor, kPlanIdSetter, kStateSetter, kExpirySetter,
-            kTitleSetter, kDescriptionSetter, kPriceSetter, kPeriodSetter
-        };
         const wchar_t *names[] = {
             L".ctor", L"set_PlanId", L"set_State", L"set_ExpiryDate",
             L"set_Title", L"set_Description", L"set_Price", L"set_PeriodMonths"
         };
-        for (size_t i = 0; i < ARRAYSIZE(expected); ++i)
+        for (size_t i = 0; i < ARRAYSIZE(names); ++i)
         {
-            if (flexible)
+            if (!FindMemberRefByName(import, tokens.planType, names[i], tokens.plan[i]) &&
+                ((tokens.planType & 0xFF000000u) != 0x02000000u ||
+                    !FindMethodByName(import, static_cast<mdTypeDef>(tokens.planType), names[i], tokens.plan[i])))
             {
-                if (!FindMemberRefByName(import, tokens.planType, names[i], tokens.plan[i]) &&
-                    ((tokens.planType & 0xFF000000u) != 0x02000000u ||
-                        !FindMethodByName(import, static_cast<mdTypeDef>(tokens.planType), names[i], tokens.plan[i])))
-                {
-                    Log(std::wstring(L"shape: plan MemberRef not found: ") + names[i]);
-                    return false;
-                }
-            }
-            else
-            {
-                if (!ValidateMember(import, expected[i], names[i])) return false;
-                tokens.plan[i] = expected[i];
+                Log(std::wstring(L"shape: plan MemberRef not found: ") + names[i]);
+                return false;
             }
         }
         return true;
@@ -862,7 +831,7 @@ namespace
         CRITICAL_SECTION lock_{};
         std::wstring mode_;
         std::vector<int> plans_;
-        std::wstring appId_;
+        std::vector<std::wstring> appIds_;
         bool testMode_ = false;
         bool active_ = false;
         bool instrument_ = false;
@@ -908,6 +877,31 @@ namespace
             return !expected.empty() && Lower(CurrentProcessImage()) == expected;
         }
 
+        static bool IsExtensionId(const std::wstring &value)
+        {
+            if (value.size() != 40) return false;
+            for (wchar_t character : value)
+                if (character < L'a' || character > L'p') return false;
+            return true;
+        }
+
+        bool ParseExtensionIds(const std::wstring &text)
+        {
+            size_t start = 0;
+            while (start < text.size())
+            {
+                size_t end = text.find(L',', start);
+                if (end == std::wstring::npos) end = text.size();
+                const std::wstring item = Lower(text.substr(start, end - start));
+                if (!IsExtensionId(item) ||
+                    std::find(appIds_.begin(), appIds_.end(), item) != appIds_.end())
+                    return false;
+                appIds_.push_back(item);
+                start = end + 1;
+            }
+            return !appIds_.empty() && appIds_.size() <= 256;
+        }
+
         void LogProcessIdentity(const wchar_t *phase)
         {
             Log(std::wstring(phase) + L" pid=" + std::to_wstring(GetCurrentProcessId()) +
@@ -936,10 +930,13 @@ namespace
             logJitDetails_ = Lower(Env(L"OVERWOLF_PATCHER_PROFILER_VERBOSE")) == L"1" ||
                 mode_ == L"observe" || mode_ == L"flags";
             if (mode_ != L"premium") return true;
-            appId_ = Env(L"OVERWOLF_PATCHER_APP");
-            if (appId_.size() != 40) return false;
-            for (wchar_t value : appId_)
-                if (value < L'a' || value > L'p') return false;
+            const std::wstring appList = Env(L"OVERWOLF_PATCHER_APPS");
+            if (!appList.empty())
+            {
+                if (!ParseExtensionIds(appList)) return false;
+            }
+            else if (!ParseExtensionIds(Env(L"OVERWOLF_PATCHER_APP")))
+                return false;
             const std::wstring planText = Env(L"OVERWOLF_PATCHER_PLANS");
             size_t start = 0;
             while (start < planText.size())
@@ -956,29 +953,14 @@ namespace
             return !plans_.empty() && plans_.size() <= 32;
         }
 
-        bool ValidateModuleIdentity(const std::wstring &path, IMetaDataImport *import)
+        bool ValidateModuleShape(const std::wstring &path, IMetaDataImport *import)
         {
             if (testMode_)
             {
-                Log(L"test mode: accepting fixture module identity");
+                Log(L"test mode: accepting fixture module shape");
                 return true;
             }
-            const std::wstring expected = Lower(Env(L"OVERWOLF_PATCHER_EXPECTED_CORE_SHA256")).empty()
-                ? std::wstring(kReviewedCoreHash) : Lower(Env(L"OVERWOLF_PATCHER_EXPECTED_CORE_SHA256"));
-            const std::wstring actual = Lower(HashFile(path));
-            if (actual.empty() || actual != Lower(expected))
-            {
-                Log(L"refusing unknown Core hash: " + actual);
-                return false;
-            }
-            GUID mvid{};
-            ULONG written = 0;
-            wchar_t scopeName[256]{};
-            if (FAILED(import->GetScopeProps(scopeName, ARRAYSIZE(scopeName), &written, &mvid)) || !IsEqualGUID(mvid, kExpectedMvid))
-            {
-                Log(L"refusing unknown Core MVID");
-                return false;
-            }
+            Log(L"accepting Core assembly by validated metadata shape: " + path);
             return true;
         }
 
@@ -995,6 +977,12 @@ namespace
                 ~AttemptGuard() { owner->FinishModuleAttempt(module, completed, rejected); }
             } guard{ this, module };
             Log(L"Core module observed trigger=" + HexValue(triggerToken) + L": " + path);
+            if (mode_ == L"premium")
+            {
+                for (size_t i = 0; i < appIds_.size(); ++i)
+                    Log(L"premium extension attempt [" + std::to_wstring(i + 1) + L"/" +
+                        std::to_wstring(appIds_.size()) + L"] id=" + appIds_[i]);
+            }
 
             IUnknown *metadataUnknown = nullptr;
             HRESULT hr = info_->GetModuleMetaData(module, 0x1,
@@ -1005,7 +993,7 @@ namespace
                 return;
             }
             IMetaDataImport *import = reinterpret_cast<IMetaDataImport *>(metadataUnknown);
-            if (!ValidateModuleIdentity(path, import))
+            if (!ValidateModuleShape(path, import))
             {
                 guard.rejected = true;
                 import->Release();
@@ -1013,16 +1001,10 @@ namespace
             }
 
             AdapterTokens tokens{};
-            if (!ResolveReviewedTokens(import, tokens, testMode_))
+            if (!ResolveSubscriptionTokens(import, tokens))
             {
-                Log(L"reviewed Core metadata shape was not found");
+            Log(L"compatible Core metadata shape was not found");
                 guard.rejected = true;
-                import->Release();
-                return;
-            }
-
-            if (testMode_ && triggerToken != tokens.detailed && triggerToken != tokens.ids)
-            {
                 import->Release();
                 return;
             }
@@ -1037,6 +1019,16 @@ namespace
                 return;
             }
 
+            if (mode_ == L"premium" && !FindUidGetterInBody(import, detailedOriginal, tokens.uidGetter))
+            {
+                Log(L"shape: UID getter call not found in GetExtensionSubscriptions");
+                guard.rejected = true;
+                import->Release();
+                return;
+            }
+            if (mode_ == L"premium")
+                Log(L"shape: resolved UID getter token=" + HexValue(tokens.uidGetter));
+
             std::vector<BYTE> detailedReplacement = detailedOriginal;
             std::vector<BYTE> idsReplacement = idsOriginal;
             if (mode_ == L"premium")
@@ -1049,14 +1041,19 @@ namespace
                     import->Release();
                     return;
                 }
-                mdString appString = 0;
-                hr = emit->DefineUserString(appId_.c_str(), static_cast<ULONG>(appId_.size()), &appString);
-                if (FAILED(hr) || appString == 0)
+                std::vector<mdString> appStrings;
+                for (const std::wstring &appId : appIds_)
                 {
-                    Log(L"DefineUserString failed: " + HResult(hr));
-                    emit->Release();
-                    import->Release();
-                    return;
+                    mdString appString = 0;
+                    hr = emit->DefineUserString(appId.c_str(), static_cast<ULONG>(appId.size()), &appString);
+                    if (FAILED(hr) || appString == 0)
+                    {
+                        Log(L"DefineUserString failed: " + HResult(hr));
+                        emit->Release();
+                        import->Release();
+                        return;
+                    }
+                    appStrings.push_back(appString);
                 }
                 if (tokens.intType == 0)
                 {
@@ -1085,10 +1082,10 @@ namespace
                 const LONGLONG expiry = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::system_clock::now().time_since_epoch()).count() +
                     7LL * 24LL * 60LL * 60LL * 1000LL;
-                const bool detailedBuilt = BuildBody(detailedOriginal, true, appString,
+                const bool detailedBuilt = BuildBody(detailedOriginal, true, appStrings,
                     tokens.uidGetter, tokens.stringEquality, tokens.planType, tokens.intType,
                     title, description, plans_, tokens.plan, expiry, detailedReplacement);
-                const bool idsBuilt = BuildBody(idsOriginal, false, appString,
+                const bool idsBuilt = BuildBody(idsOriginal, false, appStrings,
                     tokens.uidGetter, tokens.stringEquality, tokens.planType, tokens.intType,
                     title, description, plans_, tokens.plan, expiry, idsReplacement);
                 if (!detailedBuilt || !idsBuilt)
@@ -1186,6 +1183,7 @@ namespace
             const HRESULT getHr = info_->GetEventMask(&effectiveMask);
             active_ = SUCCEEDED(setHr);
             Log(std::wstring(L"profiler initialized mode=") + mode_ +
+                L" apps=" + std::to_wstring(appIds_.size()) +
                 L" requestedMask=" + HexValue(requestedMask_) +
                 L" setEventMask=" + HResult(setHr) +
                 L" getEventMask=" + HResult(getHr) +
@@ -1293,14 +1291,9 @@ namespace
             if (Lower(BaseName(modulePath)) == Lower(kCoreName))
             {
                 InterlockedIncrement(&coreJitCallbacks_);
-                const bool target = token == kDetailedMethod || token == kIdsMethod;
-                if (target)
-                    Log(L"JIT target started function=" + HexValue(function) +
-                        L" token=" + HexValue(token));
-                else
-                    LogJitDiagnostic(L"Core JIT started function=" + HexValue(function) +
-                        L" token=" + HexValue(token));
-                if (instrument_ && (testMode_ || target))
+                LogJitDiagnostic(L"Core JIT started function=" + HexValue(function) +
+                    L" token=" + HexValue(token));
+                if (instrument_)
                     InstrumentModule(module, modulePath, token);
             }
             else
@@ -1321,8 +1314,7 @@ namespace
             AssemblyID assembly = 0;
             if (FAILED(info_->GetModuleInfo(module, &base, ARRAYSIZE(path), &written, path, &assembly))) return S_OK;
             const std::wstring modulePath(path);
-            if (Lower(BaseName(modulePath)) == Lower(kCoreName) &&
-                (logJitDetails_ || token == kDetailedMethod || token == kIdsMethod))
+            if (Lower(BaseName(modulePath)) == Lower(kCoreName) && logJitDetails_)
                 Log(L"Core JIT finished function=" + HexValue(function) +
                     L" token=" + HexValue(token) + L" status=" + HResult(status));
             return S_OK;

@@ -58,6 +58,7 @@ if ($Test) {
     $env:OVERWOLF_PATCHER_PROFILER_LOG_PER_PROCESS = '0'
     $env:OVERWOLF_PATCHER_PROFILER_VERBOSE = '1'
     $env:OVERWOLF_PATCHER_APP = 'cghphpbjeabdkomiphingnegihoigeggcfphdofo'
+    $env:OVERWOLF_PATCHER_APPS = 'cghphpbjeabdkomiphingnegihoigeggcfphdofo,pppppppppppppppppppppppppppppppppppppppp'
     $env:OVERWOLF_PATCHER_PLANS = '61'
     & $harness
     $harnessExit = $LASTEXITCODE
@@ -65,7 +66,7 @@ if ($Test) {
             'COR_PROFILER_PATH_64', 'COMPLUS_ProfAPI_ProfilerCompatibilitySetting',
             'OVERWOLF_PATCHER_PROFILER_TEST', 'OVERWOLF_PATCHER_PROFILER_MODE',
             'OVERWOLF_PATCHER_PROFILER_LOG', 'OVERWOLF_PATCHER_PROFILER_LOG_PER_PROCESS',
-            'OVERWOLF_PATCHER_PROFILER_VERBOSE', 'OVERWOLF_PATCHER_APP', 'OVERWOLF_PATCHER_PLANS')) {
+            'OVERWOLF_PATCHER_PROFILER_VERBOSE', 'OVERWOLF_PATCHER_APP', 'OVERWOLF_PATCHER_APPS', 'OVERWOLF_PATCHER_PLANS')) {
         Remove-Item "Env:$name" -ErrorAction SilentlyContinue
     }
     if ($harnessExit -ne 0) { exit $harnessExit }
