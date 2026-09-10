@@ -45,6 +45,9 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="System.Web.Extensions" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\OverwolfPatcher.Runtime\OverwolfPatcher.Runtime.csproj" />
     <BootstrapperPackage Include=".NETFramework,Version=v4.8">
       <Visible>False</Visible>

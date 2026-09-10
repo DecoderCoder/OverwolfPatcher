@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -6,6 +7,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Xml.Linq;
 using Mono.Cecil;
+using OverwolfPatcher.Classes;
 using OverwolfPatcher.Testing;
 using OverWolf.Client.Core.ODKv2.Profile;
 
@@ -42,11 +44,22 @@ namespace OverWolf.Client.Core.ODKv2.Profile
 }
 internal class Program
 {
-    const string App = "cghphpbjeabdkomiphingnegihoigeggcfphdofo";
+    const string App = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const string CatalogApp = "cccccccccccccccccccccccccccccccccccccccc";
     static void Assert(bool condition, string message) { if (!condition) throw new Exception(message); }
     static void Reject(Action action, string message)
     {
         try { action(); } catch (Exception) { return; }
+        throw new Exception(message);
+    }
+    static void RejectContaining(Action action, string expected, string message)
+    {
+        try { action(); }
+        catch (Exception error)
+        {
+            if (error.Message.Contains(expected)) return;
+            throw new Exception(message + " Wrong error: " + error.Message);
+        }
         throw new Exception(message);
     }
     static int Main(string[] args)
@@ -58,6 +71,59 @@ internal class Program
             var directory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "fixtures", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(directory);
             var original = Assembly.GetExecutingAssembly().Location;
+
+            var extensionData = Path.Combine(directory, "overwolf-data");
+            var extensionRoot = Path.Combine(extensionData, "Extensions");
+            var secondApp = new string('p', 40);
+            var firstVersion = Path.Combine(extensionRoot, App, "175.3.12981");
+            var secondVersion = Path.Combine(extensionRoot, secondApp, "1.2.3.4");
+            Directory.CreateDirectory(firstVersion);
+            Directory.CreateDirectory(secondVersion);
+            Directory.CreateDirectory(Path.Combine(extensionRoot, "not-an-extension"));
+            File.WriteAllText(Path.Combine(firstVersion, "managed.dll"), "fixture");
+            File.WriteAllText(Path.Combine(secondVersion, "native.EXE"), "fixture");
+            var installed = new Overwolf { DataFolder = new DirectoryInfo(extensionData) };
+            Assert(installed.GetInstalledExtensionIds().SequenceEqual(new[] { App, secondApp }.OrderBy(value => value)),
+                "Installed extension discovery returned the wrong IDs");
+            Assert(installed.GetInstalledExtensionBinaries().Select(file => file.Name)
+                .SequenceEqual(new[] { "managed.dll", "native.EXE" }.OrderBy(value => value, StringComparer.OrdinalIgnoreCase)),
+                "Installed extension binary discovery returned the wrong files");
+
+            var unknownApp = new string('a', 40);
+            var lookups = new ConcurrentBag<string>();
+            var resolved = ExtensionPlanResolver.ResolveAll(new[] { App, CatalogApp, unknownApp },
+                id => { lookups.Add(id); return id == App ? new[] { 101 } : id == CatalogApp ? new[] { 202, 203 } : new int[0]; });
+            Assert(lookups.OrderBy(id => id).SequenceEqual(new[] { App, CatalogApp, unknownApp }.OrderBy(id => id)),
+                "All-extension resolution did not query each extension independently");
+            Assert(resolved.Selections.Length == 2, "Catalog plan resolution selected the wrong extensions");
+            Assert(resolved.Selections.Single(selection => selection.ExtensionId == App).Plans.SequenceEqual(new[] { 101 }),
+                "First extension's catalog plan was not retained");
+            Assert(resolved.Selections.Single(selection => selection.ExtensionId == CatalogApp).Plans.SequenceEqual(new[] { 202, 203 }),
+                "Second extension's catalog plans were not retained");
+            Assert(resolved.Skipped.Length == 1 && resolved.Skipped[0].ExtensionId == unknownApp,
+                "Unknown/no-plan extension was not skipped");
+            var noCatalog = ExtensionPlanResolver.ResolveAll(new[] { App, CatalogApp }, id => new int[0]);
+            Assert(noCatalog.Selections.Length == 0 && noCatalog.Skipped.Length == 2 &&
+                noCatalog.Skipped.All(skip => skip.Reason.Contains("no plan metadata")),
+                "Empty catalog results were not reported as non-discoverable legacy metadata");
+            Assert(ExtensionPlanResolver.ParseCatalogPlanIds("[{\"id\":101},{\"id\":202},{\"id\":101}]")
+                .SequenceEqual(new[] { 101, 202 }), "Catalog JSON plan IDs were not parsed or deduplicated");
+            Reject(() => ExtensionPlanResolver.ParseCatalogPlanIds("{\"data\":[{\"id\":101}]}"),
+                "An undocumented wrapped catalog response was accepted");
+            Reject(() => ExtensionPlanResolver.ParseCatalogPlanIds("[{\"planId\":101}]"),
+                "A non-catalog planId field was accepted");
+            Reject(() => ExtensionPlanResolver.ParseCatalogPlanIds("[{\"id\":101.5}]"),
+                "A fractional catalog plan ID was accepted");
+            Reject(() => ExtensionPlanResolver.ParseCatalogPlanIds("[{\"id\":\"101\"}]"),
+                "A string catalog plan ID was accepted");
+            var invalidCatalog = ExtensionPlanResolver.ResolveAll(new[] { App }, id => new[] { -1 });
+            Assert(invalidCatalog.Selections.Length == 0 && invalidCatalog.Skipped.Length == 1,
+                "An invalid catalog plan set was selected");
+            Reject(() => ExtensionPlanResolver.ResolveSingle(unknownApp, id => new int[0]),
+                "Single extension with no catalog plans was accepted");
+            RejectContaining(() => PremiumCommand.Run(new[] { "instrument", "--mode", "premium", "--plans", "101" }),
+                "--plans is not accepted", "In-memory instrumentation accepted a caller-supplied plan ID");
+
             byte[] patched;
             using (var assembly = AssemblyDefinition.ReadAssembly(original))
             {
@@ -143,18 +209,9 @@ internal class Program
             Assert(PremiumCommand.Hash(target) == hash, "Missing DLL restoration failed");
             File.AppendAllText(target, "simulated update");
             Reject(() => PremiumCommand.Restore(target, directory), "Restore overwrote changed installation");
-            var refusedInstall = Path.Combine(directory, "refused-install");
-            Directory.CreateDirectory(refusedInstall);
-            new XDocument(new XElement("configuration", new XElement("runtime", new XElement("assemblyBinding",
-                new XElement("probing", new XAttribute("privatePath", "Locales;0.309.0.14;0.309.0.14\\Locales"))))))
-                .Save(Path.Combine(refusedInstall, "Overwolf.exe.config"));
-            bool refused = false;
-            try { PremiumCommand.Run(new[] { "apply", "--install", refusedInstall }); }
-            catch (NotSupportedException error) { refused = error.Message.Contains("0.309.0.14"); }
-            Assert(refused, "Known-incompatible version was not refused before accessing Core");
 
             Console.WriteLine("PASS: scoped IL execution, original paths, signature guards, repeated patch rejection, atomic replacement, and restoration.");
-            Console.WriteLine("PASS: past expiry remains fixture data; known-incompatible live apply is refused.");
+            Console.WriteLine("PASS: past expiry remains fixture data; unknown Overwolf versions use metadata discovery.");
             Console.WriteLine("PASS: startup profiler launch gates are kept separate from offline rewrite tests.");
             Console.WriteLine("Test artifacts: " + directory);
             return 0;

@@ -1,3 +1,13 @@
+namespace MetadataNoise
+{
+    // This getter is intentionally unrelated to subscription identity. A global
+    // metadata search must not select it instead of the getter used by the target body.
+    public sealed class UnrelatedIdentity
+    {
+        public string UID { get; set; }
+    }
+}
+
 namespace ODKv2API
 {
     public enum SubscriptionState { Active = 3, Expired = 4 }
@@ -16,10 +26,8 @@ namespace ODKv2API
 
 namespace OverWolf.Client.Core.ODKv2.Profile
 {
-    public sealed class OverwolfSubscription
+    public sealed class OverwolfSubscription : SubscriptionIdentity
     {
-        public string UID { get; set; }
-
         public ODKv2API.DetailedActivePlan[] GetExtensionSubscriptions()
         {
             if (UID == "unused") return new ODKv2API.DetailedActivePlan[0];
@@ -30,5 +38,10 @@ namespace OverWolf.Client.Core.ODKv2.Profile
         {
             return new[] { 7 };
         }
+    }
+
+    public class SubscriptionIdentity
+    {
+        public string UID { get; set; }
     }
 }
